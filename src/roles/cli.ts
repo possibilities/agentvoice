@@ -13,11 +13,13 @@ import {
   canonicalWorkspace,
   captureFiles,
   captureRolePrompts,
+  contextWindowSettings,
   createRole,
   preflightRoleAdoption,
   type RoleBundle,
   readRole,
   rolePath,
+  writeContextWindow,
   writeVoice,
 } from "./store.ts";
 
@@ -33,6 +35,8 @@ const HELP = `agentvoice role — workspace-owned SQLite roles (no audio or infe
       Save only: an explicit runtime restart or later server session activates it.
   export --workspace <dir> --output <new.sqlite>
       Export the current revision without workspace binding or operation receipts.
+  context-window --workspace <dir> --tokens <n> | --clear --expected-revision <n> [--dry-run]
+      Save the native model context window for the next explicit runtime restart.
   status --workspace <dir>
       Show saved role identity, revision and voice.
   voice --workspace <dir> --voice <name> | --clear-voice [--revision <n>]
@@ -64,7 +68,9 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
     console.log(HELP);
     return 0;
   }
-  if (!["eject", "import", "adopt", "export", "status", "voice"].includes(command))
+  if (
+    !["eject", "import", "adopt", "export", "status", "voice", "context-window"].includes(command)
+  )
     throw new UsageError(HELP);
   const parsed =
     command === "eject"
@@ -78,16 +84,20 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
                 ? ["--role", "--expected-revision"]
                 : command === "export"
                   ? ["--output"]
-                  : command === "voice"
-                    ? ["--voice", "--revision"]
-                    : []),
+                  : command === "context-window"
+                    ? ["--tokens", "--expected-revision"]
+                    : command === "voice"
+                      ? ["--voice", "--revision"]
+                      : []),
           ]),
           bool: new Set(
-            command === "voice"
-              ? ["--clear-voice"]
-              : command === "adopt"
-                ? ["--dry-run", "--prompts-only"]
-                : [],
+            command === "context-window"
+              ? ["--clear", "--dry-run"]
+              : command === "voice"
+                ? ["--clear-voice"]
+                : command === "adopt"
+                  ? ["--dry-run", "--prompts-only"]
+                  : [],
           ),
         });
   if (!parsed.values["workspace"])
@@ -119,7 +129,34 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
     return 0;
   }
   const before = readRole(path);
-  if (command === "adopt") {
+  if (command === "context-window") {
+    const clear = argv.includes("--clear");
+    const rawTokens = parsed.values["tokens"];
+    if (clear === (rawTokens !== undefined))
+      throw new UsageError("Specify exactly one --tokens <n> or --clear");
+    const tokens = clear ? null : Number(rawTokens);
+    const expectedRevision = Number(parsed.values["expected-revision"]);
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)
+      throw new UsageError("context-window requires a positive --expected-revision <n>");
+    if (expectedRevision !== before.ref.revision)
+      throw new Error("Stale role revision; read status before editing");
+    const candidate = { ...before, settings: contextWindowSettings(before.settings, tokens) };
+    await validateRoleBundle(candidate, workspace);
+    const dryRun = argv.includes("--dry-run");
+    const ref = dryRun
+      ? { id: before.ref.id, revision: before.ref.revision + 1 }
+      : writeContextWindow(path, before.ref.id, expectedRevision, tokens);
+    console.log(
+      JSON.stringify({
+        ...ref,
+        previousRevision: before.ref.revision,
+        savedContextWindow: tokens,
+        dryRun,
+        applied: false,
+        plan: roleImpact(before, candidate),
+      }),
+    );
+  } else if (command === "adopt") {
     const roleSpec = parsed.values["role"];
     if (!roleSpec) throw new UsageError("adopt requires --role <directory|name>");
     const expectedRevision = Number(parsed.values["expected-revision"]);
@@ -201,6 +238,7 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
       JSON.stringify({
         ...before.ref,
         savedVoice: before.settings.voice?.name ?? null,
+        savedContextWindow: before.settings.orchestrator?.config?.["model_context_window"] ?? null,
         assets: before.files.length,
         hasRole: before.hasRole,
       }),

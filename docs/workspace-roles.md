@@ -258,3 +258,32 @@ outside. Native credential stores are never discovered or copied.
 Validation uses disposable databases, fake signaling and fake native children.
 Android cross-compilation includes SQLite; on-device execution and audible voice
 selection still require device/live validation.
+
+
+## Saved model context window
+
+Bound workspaces retain their captured settings when the global `server.json`
+changes. Set their native context budget explicitly without replacing the workspace,
+role identity, prompts, or thread:
+
+```sh
+agentvoice role status --workspace /absolute/project
+agentvoice role context-window --workspace /absolute/project \
+  --tokens 872000 --expected-revision 13 --dry-run
+agentvoice role context-window --workspace /absolute/project \
+  --tokens 872000 --expected-revision 13
+```
+
+Use the revision from status; a competing edit causes a stale-revision error.
+The command writes an immutable settings revision and reports `applied: false`.
+It never restarts a runtime or changes the session marker. A separately authorized
+runtime restart loads the saved setting and resumes the existing thread. Inspect
+native usage on a subsequent turn to verify application. Codex owns model limits,
+clamping and usable-context headroom; its reported window can be lower than the
+requested budget. This setting alone does not override an explicitly saved
+`model_auto_compact_token_limit`.
+
+Use `--clear` instead of `--tokens` to remove the saved override. Any
+`orchestrator.extra.config` is rejected because it replaces the managed config
+object. Assets and all other settings remain unchanged. This is a narrow saved
+setting editor, not a global-config sync or live context-window operation.

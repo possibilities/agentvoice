@@ -30,6 +30,7 @@ import {
   type RoleBundle,
   readRole,
   rolePath,
+  writeContextWindow,
   writeVoice,
 } from "../src/roles/store.ts";
 
@@ -533,4 +534,113 @@ test("two processes cannot overwrite the initial workspace binding", async () =>
   ];
   expect((await Promise.all(children.map((child) => child.exited))).sort()).toEqual([0, 2]);
   expect(readRole(f.path).ref.revision).toBe(1);
+});
+
+test("saved context window preserves role, assets and exact thread across resumed launch", async () => {
+  const f = fixture();
+  const original = {
+    settings: {
+      voice: { name: "breeze" },
+      orchestrator: {
+        model: "gpt-6-astra",
+        effort: "low",
+        config: { model_auto_compact_token_limit: 220000 },
+      },
+    },
+    hasRole: false,
+    files: [
+      { path: "ORCHESTRATOR_SYSTEM_PROMPT.md", bytes: Buffer.from("keep me"), executable: false },
+    ],
+  } satisfies RoleBundle;
+  const role = createRole(f.path, original);
+  writeFileSync(join(f.workspace, ".agentvoice-session"), "existing-thread\n");
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const args = [
+      "context-window",
+      "--workspace",
+      f.workspace,
+      "--tokens",
+      "872000",
+      "--expected-revision",
+      "1",
+    ];
+    await runRoleCommand([...args, "--dry-run"]);
+    expect(readRole(f.path).ref).toEqual(role);
+    await runRoleCommand(args);
+    const saved = readRole(f.path);
+    expect(saved.ref).toEqual({ id: role.id, revision: 2 });
+    expect(saved.files).toEqual(original.files);
+    expect(saved.settings.voice).toEqual(original.settings.voice);
+    expect(saved.settings.orchestrator).toEqual({
+      ...original.settings.orchestrator,
+      config: { model_auto_compact_token_limit: 220000, model_context_window: 872000 },
+    });
+    expect(readFileSync(join(f.workspace, ".agentvoice-session"), "utf8")).toBe(
+      "existing-thread\n",
+    );
+    const config = await loadLaunchConfig(parseArgs(["--workspace", f.workspace]));
+    expect(threadParams(config, {}, "resume").config).toMatchObject({
+      model_context_window: 872000,
+    });
+    expect(() => writeContextWindow(f.path, role.id, 1, 500000)).toThrow("Stale role revision");
+    expect(() => writeContextWindow(f.path, "different-role", 2, 500000)).toThrow(
+      "Role identity changed",
+    );
+    await runRoleCommand([
+      "context-window",
+      "--workspace",
+      f.workspace,
+      "--clear",
+      "--expected-revision",
+      "2",
+    ]);
+    expect(readRole(f.path).settings.orchestrator?.config).toEqual({
+      model_auto_compact_token_limit: 220000,
+    });
+    const db = new Database(f.path, { readonly: true });
+    try {
+      expect(
+        JSON.parse(
+          db
+            .query<{ settings: string }, []>("SELECT settings FROM revisions WHERE revision=2")
+            .get()!.settings,
+        ).orchestrator.config.model_context_window,
+      ).toBe(872000);
+    } finally {
+      db.close();
+    }
+  } finally {
+    log.mockRestore();
+  }
+});
+
+test("context window edits reject invalid budgets and masking raw config without writes", async () => {
+  const f = fixture();
+  const role = createRole(f.path, empty);
+  for (const tokens of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
+    expect(() => writeContextWindow(f.path, role.id, 1, tokens)).toThrow("positive safe integer");
+  await expect(
+    runRoleCommand(["context-window", "--workspace", f.workspace, "--tokens", "872000"]),
+  ).rejects.toThrow("expected-revision");
+  await expect(
+    runRoleCommand([
+      "context-window",
+      "--workspace",
+      f.workspace,
+      "--tokens",
+      "872000",
+      "--clear",
+      "--expected-revision",
+      "1",
+    ]),
+  ).rejects.toThrow("exactly one");
+  expect(readRole(f.path).ref).toEqual(role);
+  const masked = fixture();
+  const maskedRole = createRole(masked.path, {
+    ...empty,
+    settings: { orchestrator: { extra: { config: {} } } },
+  });
+  expect(() => writeContextWindow(masked.path, maskedRole.id, 1, 872000)).toThrow("masks");
+  expect(readRole(masked.path).ref).toEqual(maskedRole);
 });

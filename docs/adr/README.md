@@ -157,3 +157,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0095: Preserve the native delegation-filler default](0095-native-delegation-filler-default.md) — accepted; omitted realtime requests defer delegation acknowledgement filler behavior to Codex, while named and raw overrides remain explicit.
 - [0096: Observe a bound role's configured adoption source](0096-observe-bound-role-adoption-source.md) — accepted; status separates immutable database revision freshness from the currently configured directory role available for explicit adoption.
 - [0097: Gate routing updates on displayed usage](0097-gate-routing-updates-on-displayed-usage.md) — accepted; after initial delivery, only a changed displayed percentage can produce a coalesced update, and every accepted update shares the five-minute cooldown.
+
+- [0098: Explicit saved context-window edits](0098-edit-saved-role-context-window.md)

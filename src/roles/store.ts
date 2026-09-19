@@ -552,3 +552,58 @@ export function writeVoice(path: string, roleId: string, request: VoiceEdit): Ro
     db.close();
   }
 }
+
+/** Saved-only context budget edit; native Codex validates/clamps the selected model limit. */
+export function contextWindowSettings(values: ConfigValues, tokens: number | null): ConfigValues {
+  if (tokens !== null && (!Number.isSafeInteger(tokens) || tokens < 1))
+    throw new Error("Context window must be a positive safe integer");
+  if (Object.hasOwn(values.orchestrator?.extra ?? {}, "config"))
+    throw new Error("Raw orchestrator.extra.config masks the managed context window");
+  const config = { ...values.orchestrator?.config };
+  if (tokens === null) delete config["model_context_window"];
+  else config["model_context_window"] = tokens;
+  return settings({ ...values, orchestrator: { ...values.orchestrator, config } });
+}
+
+export function writeContextWindow(
+  path: string,
+  roleId: string,
+  expectedRevision: number,
+  tokens: number | null,
+): RoleRef {
+  const db = open(path, false);
+  try {
+    return db
+      .transaction(() => {
+        const ref = roleRefSchema.parse(db.query("SELECT id, revision FROM role").get());
+        if (ref.id !== roleId) throw new Error("Role identity changed");
+        if (ref.revision !== expectedRevision)
+          throw new Error("Stale role revision; read status before editing");
+        const count = db
+          .query<{ count: number }, []>("SELECT count(*) AS count FROM revisions")
+          .get()!.count;
+        if (count >= MAX_REVISIONS)
+          throw new Error(
+            "Role revision limit reached; export/import into another workspace to compact",
+          );
+        const row = db
+          .query<{ settings: string; manifest: string; has_role: number }, [number]>(
+            "SELECT settings, manifest, has_role FROM revisions WHERE revision=?",
+          )
+          .get(ref.revision)!;
+        const values = contextWindowSettings(settings(JSON.parse(row.settings)), tokens);
+        const revision = ref.revision + 1;
+        db.query("INSERT INTO revisions VALUES (?, ?, ?, ?)").run(
+          revision,
+          JSON.stringify(values),
+          row.manifest,
+          row.has_role,
+        );
+        db.query("UPDATE role SET revision=?").run(revision);
+        return { id: ref.id, revision };
+      })
+      .immediate();
+  } finally {
+    db.close();
+  }
+}
