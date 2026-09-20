@@ -1,3 +1,4 @@
+import { Separator } from "@base-ui/react/separator";
 import { ChevronRightIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 import { activitySummary, type TranscriptActivityItem } from "@/lib/transcript";
@@ -49,25 +50,28 @@ export const ActivityGroup = memo(function ActivityGroup({
       <IdentityRow identity="group">
         <div className="identity-row__content">
           <CollapsibleTrigger className="activity-group__trigger" data-open={open || undefined}>
-            <span className="activity-group__count">{items.length} activities</span>
-            <span className="activity-group__summary">
-              {kinds
-                .map(([name, count]) => `${count} ${activityKindLabel(name, count)}`)
-                .join(" · ")}
-            </span>
-            {errors > 0 ? <span className="activity-group__error">{errors} failed</span> : null}
-            {running > 0 ? <span className="telemetry-live">{running} running</span> : null}
-            {files > 0 ? (
-              <span className="activity-group__files">
-                {files} file {files === 1 ? "change" : "changes"}
+            <span className="activity-group__label">
+              <span className="activity-group__count">{items.length} activities</span>
+              <span className="activity-group__summary">
+                {kinds
+                  .map(([name, count]) => `${count} ${activityKindLabel(name, count)}`)
+                  .join(" · ")}
               </span>
-            ) : null}
+              {errors > 0 ? <span className="activity-group__error">{errors} failed</span> : null}
+              {running > 0 ? <span className="telemetry-live">{running} running</span> : null}
+              {files > 0 ? (
+                <span className="activity-group__files">
+                  {files} file {files === 1 ? "change" : "changes"}
+                </span>
+              ) : null}
+            </span>
             <ChevronRightIcon className="tool-disclosure__chevron" aria-hidden="true" />
           </CollapsibleTrigger>
           <CollapsibleContent>
             {open ? (
               <ToolActivityGroupContext.Provider value={true}>
                 <div className="activity-group__items">
+                  <Separator className="activity-group__divider" />
                   {items.map((item) => (
                     <ActivityItem key={item.id} item={item} />
                   ))}

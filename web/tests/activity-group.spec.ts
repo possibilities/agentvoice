@@ -42,7 +42,7 @@ function routing(id: string, revision: number) {
   };
 }
 
-test("compact activity summary expands current Tool blocks without horizontal rules", async ({
+test("compact activity summary expands Tool blocks under one header divider", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1180, height: 900 });
@@ -92,6 +92,7 @@ test("compact activity summary expands current Tool blocks without horizontal ru
   await expect(trigger).toContainText("1 failed");
   await expect(trigger).toContainText("2 file changes");
   await expect(group.locator('.tool-disclosure[data-transcript-type="tool-call"]')).toHaveCount(0);
+  await expect(group.getByRole("separator")).toHaveCount(0);
   expect(
     await trigger.evaluate((element) => {
       const style = getComputedStyle(element);
@@ -107,6 +108,8 @@ test("compact activity summary expands current Tool blocks without horizontal ru
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
   const tools = group.locator('.tool-disclosure[data-transcript-type="tool-call"]');
   await expect(tools).toHaveCount(4);
+  await expect(group.getByRole("separator")).toHaveCount(1);
+  await expect(group.getByRole("separator")).toBeVisible();
   expect(
     await tools.evaluateAll((elements) =>
       elements.map((element) => getComputedStyle(element).borderBottomWidth),
@@ -128,6 +131,7 @@ test("compact activity summary expands current Tool blocks without horizontal ru
   await trigger.press("Space");
   await expect(trigger).toHaveAttribute("aria-expanded", "false");
   await expect(trigger).toBeFocused();
+  await expect(group.getByRole("separator")).toHaveCount(0);
   await expect(group.locator('.tool-disclosure[data-transcript-type="tool-call"]')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("activity-collapsed-desktop.png") });
 

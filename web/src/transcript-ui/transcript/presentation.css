@@ -570,13 +570,8 @@
   min-width: 0;
 }
 .activity-group__trigger {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
   width: 100%;
   min-height: 36px;
-  padding: 6px 24px 6px 0;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -585,10 +580,27 @@
   text-decoration: none;
   box-shadow: none;
 }
-.activity-group__trigger > .tool-disclosure__chevron {
-  position: absolute;
-  top: 11px;
-  right: 0;
+.activity-group__trigger,
+.tool-disclosure__trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: start;
+  column-gap: 10px;
+  padding: 8px 0;
+}
+.activity-group__label,
+.tool-disclosure__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  gap: 4px 10px;
+}
+:is(.activity-group__trigger, .tool-disclosure__trigger) > .tool-disclosure__chevron {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  margin-top: 3px;
 }
 .activity-group__trigger:hover {
   color: var(--text);
@@ -623,8 +635,14 @@
 .activity-group__items {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 8px 0 0;
+  gap: 4px;
+  margin: 2px 0 0;
+}
+.activity-group__divider {
+  flex: none;
+  width: 100%;
+  height: 1px;
+  background: var(--line);
 }
 [data-slot="marker"] {
   gap: 10px;
@@ -633,8 +651,7 @@
   background: transparent;
   align-items: flex-start;
 }
-/* Grouping is communicated by the disclosure and spacing. The generic Tool
-   blocks keep their content and controls without drawing list dividers. */
+/* Only the group header boundary draws a divider; child disclosures stay unruled. */
 .activity-group__items [data-slot="marker"] {
   border-bottom-width: 0;
 }
@@ -655,8 +672,6 @@
   color: var(--danger);
 }
 .tool-disclosure__trigger {
-  display: grid;
-  align-items: center;
   width: 100%;
   min-width: 0;
   min-height: 36px;
@@ -665,25 +680,27 @@
   color: var(--muted);
   text-align: left;
 }
-.tool-disclosure__trigger {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 12px;
-  padding: 6px 0;
-}
+.tool-disclosure__label { column-gap: 12px; }
 .tool-disclosure__name {
+  flex: 0 1 auto;
+  max-width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--text);
   font-size: 14px;
 }
 .tool-disclosure__summary {
+  flex: 1 1 12ch;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tool-disclosure__meta {
-  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   font-size: 13px;
 }
 .tool-disclosure__chevron {
@@ -994,16 +1011,15 @@
   .identity-row { --identity-action-width: 44px; }
   .identity-row[data-identity="tool"],
   .identity-row[data-identity="group"] { --identity-mark-top: 14px; }
-  .activity-group__trigger { min-height: 44px; padding-block: 12px; flex-wrap: wrap; row-gap: 4px; }
-  .activity-group__trigger > .tool-disclosure__chevron { top: 15px; }
+  .activity-group__trigger,
+  .tool-disclosure__trigger { min-height: 44px; padding-block: 12px; }
   .activity-group__count { flex: 1; }
   .activity-group__summary { display: none; }
   .activity-group__files { flex-basis: 100%; }
-  .tool-disclosure__trigger { min-height: 44px; padding-block: 12px; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; }
+  .tool-disclosure__label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .tool-disclosure__name { grid-column: 1; grid-row: 1; }
   .tool-disclosure__summary { grid-column: 1; grid-row: 2; }
   .tool-disclosure__summary:empty { display: none; }
-  .tool-disclosure__chevron { grid-column: 2; grid-row: 1; }
   .tool-disclosure__meta { display: none; }
 }
 @container transcript (max-width: 400px) {
@@ -1012,7 +1028,8 @@
 }
 @media (pointer: coarse) {
   .identity-row { --identity-action-width: 44px; }
-  .activity-group__trigger > .tool-disclosure__chevron { top: 15px; }
+  .activity-group__trigger,
+  .tool-disclosure__trigger { padding-block: 12px; }
   .identity-row[data-identity="tool"],
   .identity-row[data-identity="group"] { --identity-mark-top: 14px; }
   .tool-disclosure__trigger,

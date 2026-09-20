@@ -64,6 +64,14 @@ A routing rollup carries the first source message's `createdAt`, matching its
 stable first-source ID. Later updates retain that creation time. Missing or invalid
 first-source time stays omitted, including when a later update has a known time.
 
+Scope revision 9 refines the expanded group boundary: a closed group has no
+divider; an open group has one restrained one-pixel Separator between its header
+and children, with no rules between children or after the last child. The list
+uses a two-pixel top offset and four-pixel gaps, including below the divider.
+Header and child Tool triggers share one fixed sixteen-pixel trailing caret
+column. Labels and visible metadata wrap independently of that column; existing
+responsive metadata visibility and coarse-pointer targets remain.
+
 The existing Message, Bubble, Marker, Collapsible and Dialog primitives own their
 content and interactions. WindowedTranscript additionally retains at most one
 focused row outside its ordinary window, including while its portaled dialog is

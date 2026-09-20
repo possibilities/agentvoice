@@ -50,12 +50,14 @@ export function ToolActivityMessage({
         disabled={!hasDetails}
         data-open={open || undefined}
       >
-        <span className="tool-disclosure__name">
-          {isError ? "Failed · " : ""}
-          {activity?.name ?? "Tool"}
+        <span className="tool-disclosure__label">
+          <span className="tool-disclosure__name">
+            {isError ? "Failed · " : ""}
+            {activity?.name ?? "Tool"}
+          </span>
+          <span className="tool-disclosure__summary">{summary}</span>
+          {activity?.meta ? <span className="tool-disclosure__meta">{activity.meta}</span> : null}
         </span>
-        <span className="tool-disclosure__summary">{summary}</span>
-        {activity?.meta ? <span className="tool-disclosure__meta">{activity.meta}</span> : null}
         {hasDetails ? <ChevronRightIcon className="tool-disclosure__chevron" /> : null}
       </CollapsibleTrigger>
       {hasDetails ? (
