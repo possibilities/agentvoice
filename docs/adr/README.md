@@ -148,14 +148,15 @@ different decision. Keep this navigation index and the record's status together.
 
 - [0089: Render native file changes as top-level diff cards](0089-top-level-file-change-diffs.md) — accepted; one correlated file-change item keeps native order and status while exposing lazy Pierre diffs, exact details, and truthful bounded fallbacks.
 
-- [0090: Deliver bounded manager routing orientation](0090-deliver-manager-routing-orientation.md)
+- [0090: Deliver bounded manager routing orientation](0090-deliver-manager-routing-orientation.md) — superseded by [0099](0099-retire-live-manager-routing-orientation.md); historical routing outputs remain readable.
 - [0091: Export canonical collaboration task identity](0091-export-canonical-collaboration-identity.md) — accepted; native thread-spawn paths are reconciled by exact thread ID and exported as explicit verified or error evidence.
 
 - [0092: Defer direct-child delivery during human speech](0092-defer-direct-child-delivery-during-human-speech.md) — superseded by [0094](0094-restore-immediate-direct-child-delivery.md); the deferral was not shown to affect the reported interruptions.
-- [0093: Throttle routing-context turns and expose read-only context](0093-throttle-routing-context-turns.md) — accepted and partly superseded by [0097](0097-gate-routing-updates-on-displayed-usage.md); one-minute sampling and the fenced full query remain active.
+- [0093: Throttle routing-context turns and expose read-only context](0093-throttle-routing-context-turns.md) — superseded by [0099](0099-retire-live-manager-routing-orientation.md).
 - [0094: Restore immediate direct-child completion delivery](0094-restore-immediate-direct-child-delivery.md) — accepted; direct-child completions use the existing `turn/start` path immediately, with the existing dedupe and no-retry semantics.
 - [0095: Preserve the native delegation-filler default](0095-native-delegation-filler-default.md) — accepted; omitted realtime requests defer delegation acknowledgement filler behavior to Codex, while named and raw overrides remain explicit.
 - [0096: Observe a bound role's configured adoption source](0096-observe-bound-role-adoption-source.md) — accepted; status separates immutable database revision freshness from the currently configured directory role available for explicit adoption.
-- [0097: Gate routing updates on displayed usage](0097-gate-routing-updates-on-displayed-usage.md) — accepted; after initial delivery, only a changed displayed percentage can produce a coalesced update, and every accepted update shares the five-minute cooldown.
+- [0097: Gate routing updates on displayed usage](0097-gate-routing-updates-on-displayed-usage.md) — superseded by [0099](0099-retire-live-manager-routing-orientation.md).
 
 - [0098: Explicit saved context-window edits](0098-edit-saved-role-context-window.md)
+- [0099: Retire live manager routing orientation](0099-retire-live-manager-routing-orientation.md) — accepted; removes routing polling, publication, native injection and the fresh query while preserving historical transcript cards and receipts.

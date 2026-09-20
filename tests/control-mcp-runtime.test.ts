@@ -107,6 +107,8 @@ describe("mandatory control registration", () => {
           tool: "agentvoice_status",
           arguments: {},
         });
+        expect(h.native.calls.filter((call) => call.method === "turn/start")).toEqual([]);
+        expect(control.tools).not.toContain("agentvoice_routing_context");
         expect(h.native.options.env?.["PRIVATE_TEST_CAPABILITY"]).toBe("fixture-secret");
       } finally {
         await runtime.shutdown();

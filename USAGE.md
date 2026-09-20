@@ -137,7 +137,7 @@ operation ID returns its recorded outcome; changing the prompt under that ID
 is a conflict. Inspect native history before considering another action. Redial,
 later restarts, and full quit/relaunch do not replay this handoff.
 
-The current control protocol is 4. Update Unix clients to `v: 4` and restart
+The current control protocol is 9. Update Unix clients to `v: 9` and restart
 the server to activate changed controller code; runtime restart alone
 retains the previous controller/API. The native voice protocol is unchanged.
 

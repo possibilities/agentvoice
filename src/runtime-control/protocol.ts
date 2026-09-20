@@ -31,7 +31,6 @@ export interface RuntimeLaunch {
   nativeStateDir?: string;
 }
 export interface RuntimeActivation {
-  routingIdentity?: import("../core/routing-orientation.ts").RoutingIdentity;
   threadId?: string;
   frontendAttached?: boolean;
   mute: { mic: boolean; speaker: boolean };

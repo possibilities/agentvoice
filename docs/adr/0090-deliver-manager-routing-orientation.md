@@ -1,5 +1,7 @@
 # 0090: Deliver bounded manager routing orientation
 
+Status: Superseded by [ADR 0099](0099-retire-live-manager-routing-orientation.md).
+
 Accepted at the operator's request to ship and use quota-aware delegation.
 Extends ADR 0080's named native output transport without changing direct-child
 completion ownership or adding an AgentVoice worker executor.

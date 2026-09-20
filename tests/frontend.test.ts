@@ -652,12 +652,6 @@ test("API restart retains the call and a disconnect during replacement leaves it
       threadId: "same-thread",
       frontendAttached: true,
       mute: { mic: true, speaker: false },
-      routingIdentity: {
-        controllerId: "frontend-restart",
-        generation: 2,
-        processInstanceId: "frontend-restart:2",
-        buildId: "fake",
-      },
     });
     expect(closed).toBe(false);
     client.command({ action: "mute", target: "speaker", muted: true });

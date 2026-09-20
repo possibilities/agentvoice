@@ -1,6 +1,6 @@
 # 0097: Gate routing updates on displayed usage
 
-Status: Accepted 2026-09-17 at the operator's request.
+Status: Superseded by [ADR 0099](0099-retire-live-manager-routing-orientation.md).
 
 ## Context
 

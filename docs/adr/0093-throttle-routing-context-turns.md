@@ -1,6 +1,6 @@
 # 0093: Throttle routing-context turns and expose read-only context
 
-Status: Accepted
+Status: Superseded by [ADR 0099](0099-retire-live-manager-routing-orientation.md).
 
 [ADR 0097](0097-gate-routing-updates-on-displayed-usage.md) supersedes the immediate
 non-quota triggers and one-point threshold below. One-minute sampling, the initial snapshot,

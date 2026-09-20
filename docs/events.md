@@ -2,7 +2,7 @@
 
 Each server-owned workspace-session controller exposes a **separate read-only Unix socket**
 for thread state, transient voice items and conversation observation. The event
-protocol remains 2; the separate control API uses protocol 9 for status, routing reads, redial and restart. A new
+protocol remains 2; the separate control API uses protocol 9 for status, voice selection, redial and restart. A new
 server workspace session creates a new controller and socket. Frontend detach
 preserves it; rediscover after server restart.
 Protocol-1 event clients must update.

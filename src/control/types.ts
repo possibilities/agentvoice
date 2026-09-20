@@ -16,7 +16,6 @@ export const CONTROL_MCP_TOOLS = [
   "agentvoice_new_session",
   "agentvoice_voice_set",
   "agentvoice_voice_get",
-  "agentvoice_routing_context",
 ] as const;
 
 export type ControlOperationPhase =
@@ -121,7 +120,6 @@ type MaybePromise<T> = T | Promise<T>;
 
 /** The controller implements this; control transports only validate and dispatch. */
 export interface ControlBackend {
-  routingContext?(): Promise<unknown>;
   voiceGet(request: { refresh?: boolean }): Promise<VoiceGetResult>;
   voiceSet(request: VoiceSetRequest): Promise<ControlOperation>;
   status(): MaybePromise<ControlStatus>;

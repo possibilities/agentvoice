@@ -33,12 +33,6 @@ function operation(
 function fakeBackend(
   observe?: (request: unknown) => void,
   observeVoiceGet?: (request: { refresh?: boolean }) => void,
-  routingContext: unknown = {
-    schema_version: 1,
-    status: "unavailable",
-    stream_id: null,
-    reason: "routing_orientation_unavailable",
-  },
 ): ControlBackend {
   const recentOperations: ControlOperation[] = [];
   const byId = new Map<string, ControlOperation>();
@@ -72,7 +66,6 @@ function fakeBackend(
     return next;
   };
   return {
-    routingContext: async () => routingContext,
     status: (): ControlStatus => ({
       protocolVersion: CONTROL_PROTOCOL_VERSION,
       instanceId: "instance-a",
@@ -223,7 +216,6 @@ describe("controller control transports", () => {
           "agentvoice_new_session",
           "agentvoice_voice_set",
           "agentvoice_voice_get",
-          "agentvoice_routing_context",
         ],
       });
       const status = await socketRequest(server.socketPath, {
@@ -263,16 +255,9 @@ describe("controller control transports", () => {
       const toolsPayload = await mcpPayload(tools);
       const toolText = JSON.stringify(toolsPayload);
       expect(toolText).toContain("agentvoice_restart_runtime");
-      expect(toolText).toContain("agentvoice_routing_context");
+      expect(toolText).not.toContain("agentvoice_routing_context");
       expect(toolText).toContain("handoffPrompt");
       expect(toolText).not.toContain("mailbox");
-      const routingTool = (
-        (toolsPayload.result as { tools: Array<Record<string, unknown>> }).tools ?? []
-      ).find((tool) => tool.name === "agentvoice_routing_context");
-      expect(routingTool).toMatchObject({
-        inputSchema: { type: "object" },
-        outputSchema: { type: "object" },
-      });
       expect(
         await socketRequest(server.socketPath, {
           v: CONTROL_PROTOCOL_VERSION,
@@ -281,37 +266,7 @@ describe("controller control transports", () => {
           method: "agentvoice.routing_context",
           params: {},
         }),
-      ).toMatchObject({
-        ok: true,
-        result: {
-          schema_version: 1,
-          status: "unavailable",
-          reason: "routing_orientation_unavailable",
-        },
-      });
-      const routingCall = await mcpRequest(
-        server.httpUrl,
-        server.bearerToken,
-        {
-          jsonrpc: "2.0",
-          id: "routing-mcp",
-          method: "tools/call",
-          params: { name: "agentvoice_routing_context", arguments: {} },
-        },
-        sessionId ?? undefined,
-      );
-      expect(await mcpPayload(routingCall)).toMatchObject({
-        jsonrpc: "2.0",
-        id: "routing-mcp",
-        result: {
-          structuredContent: {
-            schema_version: 1,
-            status: "unavailable",
-            stream_id: null,
-            reason: "routing_orientation_unavailable",
-          },
-        },
-      });
+      ).toMatchObject({ ok: false, error: { code: "unknown_method" } });
       expect(
         await socketRequest(server.socketPath, {
           v: CONTROL_PROTOCOL_VERSION,
@@ -512,123 +467,6 @@ describe("controller control transports", () => {
         });
         expect(legacy).toMatchObject({ ok: false, error: { code: "invalid_request" } });
       }
-    } finally {
-      await server.close();
-      await rm(stateDir, { recursive: true, force: true });
-    }
-  });
-
-  test("routing_context validates and returns an available nested result through MCP", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "agentvoice-control-"));
-    const routingContext = {
-      schema_version: 1,
-      status: "available",
-      stream_id: "manager-a:thread-a",
-      revision: {
-        producer_generation: 2,
-        context_revision: 4,
-        digest: "a".repeat(64),
-      },
-      freshness: {
-        state: "fresh",
-        observed_at: "2026-09-17T12:00:00.000Z",
-        expires_at: "2026-09-17T12:05:00.000Z",
-        checked_at: "2026-09-17T12:01:00.000Z",
-      },
-      fence: {
-        controller_id: "instance-a",
-        controller_generation: 7,
-        thread_id: "thread-a",
-        runtime_build_id: "build-a",
-        matches_current_runtime: true,
-      },
-      delivery: {
-        mode: "full",
-        source_mode: "delta",
-        delivered_at: "2026-09-17T12:00:00.000Z",
-        turn_id: "turn-a",
-        note: "Self-contained full projection.",
-      },
-      context: {
-        current: {
-          provider: "openai",
-          model: "gpt-6-astra",
-          effort: "low",
-          serviceTier: "priority",
-        },
-        guidance: {
-          taskFit: ["architecture"],
-          routingEnabled: true,
-          codexCostOrder: ["luna", "sol"],
-        },
-        nativeCatalog: {
-          capabilityDigest: "catalog-a",
-          drift: [],
-          models: [
-            { model: "gpt-6-astra", efforts: ["low"], serviceTiers: ["priority"], hidden: false },
-          ],
-        },
-        quota: {
-          sourceRevision: 9,
-          eligibleAccountKeys: ["openai:primary"],
-          delegationAvailable: true,
-          accounts: [],
-          grok: [],
-        },
-        grokCatalog: {
-          status: "available",
-          expiresAt: "2026-09-17T12:05:00.000Z",
-          drift: [],
-          routable: { defaultModel: "grok-code-fast-1", models: ["grok-code-fast-1"] },
-          accounts: [],
-        },
-      },
-    };
-    const server = await startControlServer({
-      backend: fakeBackend(undefined, undefined, routingContext),
-      stateDir,
-      instanceId: "instance-a",
-    });
-    try {
-      const initial = await mcpRequest(server.httpUrl, server.bearerToken, {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: {
-          protocolVersion: "2025-03-26",
-          capabilities: {},
-          clientInfo: { name: "test", version: "1" },
-        },
-      });
-      const sessionId = initial.headers.get("mcp-session-id");
-      expect(sessionId).toBeString();
-      await mcpRequest(
-        server.httpUrl,
-        server.bearerToken,
-        { jsonrpc: "2.0", method: "notifications/initialized", params: {} },
-        sessionId ?? undefined,
-      );
-      const call = await mcpRequest(
-        server.httpUrl,
-        server.bearerToken,
-        {
-          jsonrpc: "2.0",
-          id: "routing-available",
-          method: "tools/call",
-          params: { name: "agentvoice_routing_context", arguments: {} },
-        },
-        sessionId ?? undefined,
-      );
-      expect(await mcpPayload(call)).toMatchObject({
-        result: {
-          structuredContent: {
-            status: "available",
-            stream_id: "manager-a:thread-a",
-            revision: { context_revision: 4, digest: "a".repeat(64) },
-            context: { current: { model: "gpt-6-astra" } },
-          },
-        },
-      });
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });

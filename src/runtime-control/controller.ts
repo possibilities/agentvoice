@@ -484,12 +484,6 @@ export class RuntimeController implements ControlBackend {
         {
           threadId: handoffTarget?.threadId ?? (this.threadId || undefined),
           frontendAttached: this.frontendAttached,
-          routingIdentity: {
-            controllerId: this.options.instanceId,
-            generation: this.generation,
-            processInstanceId: `${this.options.instanceId}:${candidate.incarnation}`,
-            buildId: info.buildId,
-          },
           mute: { mic: this.microphone.muted, speaker: this.speaker.muted },
         },
         90_000,
@@ -611,16 +605,6 @@ export class RuntimeController implements ControlBackend {
       inspection,
       ...(status.role ? { role: status.role } : {}),
     };
-  }
-
-  async routingContext(): Promise<unknown> {
-    const active = this.active;
-    if (!active || this.closed || this.phase !== "ready")
-      throw new ControlError("unavailable", "Routing context requires a ready runtime");
-    const result = await active.request("routing-context", {}, 3000);
-    if (active !== this.active || this.closed)
-      throw new ControlError("unavailable", "Runtime changed during routing context read");
-    return result;
   }
 
   async voiceSet(input: VoiceSetRequest): Promise<ControlOperation> {
@@ -1206,7 +1190,6 @@ export async function createCall(
         newSession: (request) => current().newSession(request),
         voiceSet: (request) => current().voiceSet(request),
         voiceGet: (request) => current().voiceGet(request),
-        routingContext: () => current().routingContext(),
       },
       stateDir,
       instanceId,
