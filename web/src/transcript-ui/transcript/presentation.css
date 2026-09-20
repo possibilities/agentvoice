@@ -535,12 +535,71 @@
 .chat-transcript > [data-slot="message-scroller-item"] > [data-slot="collapsible"] {
   margin-inline: 16px;
 }
+.activity-group {
+  min-width: 0;
+}
+.activity-group__trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 14px/1.428571 var(--font-mono);
+  text-align: left;
+  text-decoration: none;
+  box-shadow: none;
+}
+.activity-group__trigger:hover {
+  color: var(--text);
+}
+.activity-group__count {
+  flex: none;
+  color: var(--text);
+  font-size: 14px;
+}
+.activity-group__summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.activity-group__error {
+  flex: none;
+  color: var(--danger);
+  font-size: 13px;
+}
+.activity-group__files {
+  flex: none;
+  font-size: 13px;
+}
+.telemetry-live {
+  flex: none;
+  color: var(--accent);
+  font-size: 13px;
+}
+.activity-group__items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 4px 24px;
+}
 [data-slot="marker"] {
   gap: 10px;
   padding: 0;
   border-color: var(--line);
   background: transparent;
   align-items: flex-start;
+}
+/* Grouping is communicated by the disclosure and spacing. The generic Tool
+   blocks keep their content and controls without drawing list dividers. */
+.activity-group__items [data-slot="marker"] {
+  border-bottom-width: 0;
 }
 [data-slot="marker-icon"] {
   margin-top: 10px;
@@ -894,6 +953,10 @@
   .chat-transcript { --transcript-row-gap: 20px; padding-block: 20px 40px; }
   .thread-intro h1 { font-size: 20px; }
   .thread-intro p > :last-child { margin-left: 0; }
+  .activity-group__trigger { flex-wrap: wrap; row-gap: 4px; }
+  .activity-group__count { flex: 1; }
+  .activity-group__summary { display: none; }
+  .activity-group__files { flex-basis: calc(100% - 24px); margin-left: 24px; }
   .tool-disclosure__trigger { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
   .tool-disclosure__meta { display: none; }
 }
@@ -903,6 +966,7 @@
 }
 @media (pointer: coarse) {
   .tool-disclosure__trigger,
+  .activity-group__trigger,
   .transcript-presentation__trigger,
   .jump-latest,
   [data-slot="button"],

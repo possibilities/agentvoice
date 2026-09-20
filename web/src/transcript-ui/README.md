@@ -26,8 +26,10 @@ The transcript has one full detail surface: callers cannot hide native activity,
 and source adapters do not carry a messages-only query or filter. Its top-level
 types are Human, Agent, and generic Tool call. All machine events use that one
 Marker/activity-disclosure shell, with Attachment primitives permitted only as
-specialized inner details. No separate event card registry, special compaction UI,
-or consecutive-activity shell exists. Native file operations retain
+specialized inner details. No separate event card registry or special compaction UI
+exists. Eligible consecutive ordinary, file-change, and historical routing tools
+collapse behind a counted disclosure; expansion renders those same generic Tool
+call blocks without horizontal rules. Native file operations retain
 their order, status, paths, counts, lazy Pierre diffs, original projected evidence,
 and honest unavailable/truncated fallbacks without reading workspace files.
 
@@ -35,7 +37,8 @@ Subagent lifecycle projections receive no web presentation; direct worker result
 keep their normal conversation delivery. Voice-originated Human messages retain
 their internal provenance and complete details behind the microphone button beside
 the author without rendering a second source label. See
-[ADR 0105](../../../docs/adr/0105-compose-transcript-events-from-primitives.md).
+[ADR 0105](../../../docs/adr/0105-compose-transcript-events-from-primitives.md) and
+[ADR 0106](../../../docs/adr/0106-restore-compact-tool-activity-groups.md).
 
 The copied component boundary retains scoped lint exceptions for existing
 interaction roles, effect dependencies, and positional rendering keys; migration

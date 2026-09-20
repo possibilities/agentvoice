@@ -62,7 +62,9 @@ owns the current source map and recording/attachment implementation guidance.
   Machine events including system, routing, file-change and compaction evidence
   share the same activity disclosure; file attachments and lazy Pierre diffs are
   specialized inner details. There is no event-card registry, special compaction
-  UI or collapsed activity group.
+  UI, or lifecycle row. Eligible consecutive ordinary, file-change, and historical
+  routing tools share one compact activity disclosure; explicit system evidence
+  remains a standalone generic Tool call.
   Subagent lifecycle rows are not presented; direct worker results retain their
   separate native delivery boundary. Unknown items keep readable fallback activity.
   `server/live-reader.ts` observes the default or explicitly selected workspace

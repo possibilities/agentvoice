@@ -65,6 +65,6 @@ test("compaction keeps its exact order between organic tool disclosures", () => 
   expect(unknown.nativeItemType).toBeUndefined();
   expect(unknown.toolActivity?.name).toBe("futureNativeEvent");
   const blocks = groupTranscript([unknown, card, { ...unknown, id: "next" }]);
-  expect(blocks.map((block) => block.kind)).toEqual(["message", "message", "message"]);
+  expect(blocks.map((block) => block.kind)).toEqual(["activity", "message", "activity"]);
   expect(blocks[1]?.id).toBe(card.id);
 });

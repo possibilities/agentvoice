@@ -137,6 +137,10 @@ test("machine events share one generic Tool call shell with specialized inner de
   await expect(compacting).toHaveAttribute("data-retained", "yes");
   await expect(compacting).toHaveAttribute("data-state", "complete");
 
+  const activityGroup = transcript.locator(".activity-group__trigger");
+  await expect(activityGroup).toContainText("2 activities");
+  await activityGroup.focus();
+  await activityGroup.press("Enter");
   const routingActivity = transcript.locator('.tool-disclosure[data-transcript-type="tool-call"]', {
     hasText: "Routing context",
   });
@@ -172,9 +176,10 @@ test("machine events share one generic Tool call shell with specialized inner de
   await expect(transcript.getByText("/root/obsolete-lifecycle", { exact: true })).toHaveCount(0);
   await expect(
     transcript.locator(
-      ".system-event-card, .routing-context-card, .file-change-event, .file-disclosure, .activity-group",
+      ".system-event-card, .routing-context-card, .file-change-event, .file-disclosure",
     ),
   ).toHaveCount(0);
+  await expect(transcript.locator(".activity-group")).toHaveCount(1);
   await expect(
     transcript.locator('.tool-disclosure[data-transcript-type="tool-call"]'),
   ).toHaveCount(5);
@@ -188,7 +193,6 @@ test("machine events share one generic Tool call shell with specialized inner de
     "block:tool",
     "block:compact",
     "block:routing-1",
-    "block:files",
     "block:future-system",
     "block:after",
   ]);

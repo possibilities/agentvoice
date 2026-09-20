@@ -104,17 +104,23 @@ test("rolls refreshes into one stable block until authored conversation resumes"
   const third = agentMessage({ turnId: "turn-3", item: native("routing-3", 3, 64) })!;
   const blocks = groupTranscript([first, tool, second, human, third]);
   expect(blocks.map((block) => [block.kind, block.id])).toEqual([
-    ["routing-context", first.id],
-    ["message", tool.id],
+    ["activity", first.id],
     ["message", human.id],
-    ["routing-context", third.id],
+    ["activity", third.id],
   ]);
+  const firstActivity = blocks[0];
   expect(
-    blocks[0]?.kind === "routing-context" ? blocks[0].messages.map((message) => message.id) : [],
+    firstActivity?.kind === "activity" && firstActivity.items[0]?.kind === "routing-context"
+      ? firstActivity.items[0].messages.map((message) => message.id)
+      : [],
   ).toEqual([first.id, second.id]);
-  expect(blocks[3]?.kind === "routing-context" ? blocks[3].context.current?.model : undefined).toBe(
-    "gpt-5.6-terra",
-  );
+  expect(firstActivity?.kind === "activity" ? firstActivity.items[1]?.id : undefined).toBe(tool.id);
+  const finalActivity = blocks[2];
+  expect(
+    finalActivity?.kind === "activity" && finalActivity.items[0]?.kind === "routing-context"
+      ? finalActivity.items[0].context.current?.model
+      : undefined,
+  ).toBe("gpt-5.6-terra");
 });
 
 test("history projection matches live projection and malformed natural outputs disappear", () => {

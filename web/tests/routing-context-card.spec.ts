@@ -71,8 +71,25 @@ test("routing refreshes share one activity disclosure with exact auditable updat
     },
     routing("routing-2", 2, 68),
   ]);
+  const group = page.locator(".activity-group__trigger");
+  await expect(group).toContainText("2 activities");
+  await expect(group).toContainText("1 routing context · 1 command");
+  await group.evaluate((element) => element.setAttribute("data-retained", "yes"));
+  await setMessages([
+    { ...first },
+    {
+      id: "tool",
+      role: "tool",
+      content: "ordinary tool",
+      status: "complete",
+      toolActivity: { name: "Command", detail: "pwd", state: "complete" },
+    },
+    routing("routing-2", 2, 68),
+  ]);
+  await expect(group).toHaveAttribute("data-retained", "yes");
+  await group.focus();
+  await group.press("Enter");
   await expect(activity).toHaveCount(1);
-  await expect(activity).toHaveAttribute("data-retained", "yes");
   await expect(activity).toContainText("2 updates");
   await activity.getByRole("button").focus();
   await activity.getByRole("button").press("Enter");
@@ -138,13 +155,13 @@ test("routing rollups survive history replacement and virtualization", async ({ 
   await setMessages(messages);
   const viewport = page.getByRole("region", { name: "Component transcript", exact: true });
   const scrollToStart = async () => {
-    await viewport.hover();
-    await page.mouse.wheel(0, -10);
-    await viewport.evaluate((element) => {
-      element.scrollTop = 0;
-      element.dispatchEvent(new Event("scroll"));
-    });
-    await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeLessThan(2);
+    await viewport.focus();
+    await expect
+      .poll(async () => {
+        await viewport.press("Home");
+        return viewport.evaluate((element) => element.scrollTop);
+      })
+      .toBeLessThan(2);
   };
   await scrollToStart();
   const activity = page.locator('.tool-disclosure[data-transcript-type="tool-call"]', {

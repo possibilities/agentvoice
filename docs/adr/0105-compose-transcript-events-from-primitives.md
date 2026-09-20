@@ -6,6 +6,11 @@ presentation in [0085](0085-system-event-transcript-cards.md),
 [0089](0089-top-level-file-change-diffs.md), while preserving their source-data
 and identity boundaries where those events remain present.
 
+The consecutive-tool presentation below is refined by
+[0106](0106-restore-compact-tool-activity-groups.md), which restores a compact
+group around eligible runs while keeping every expanded child in this generic
+Tool call primitive.
+
 ## Decision
 
 The Agent transcript has exactly three top-level presentation types: Human,

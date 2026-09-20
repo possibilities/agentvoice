@@ -200,7 +200,7 @@ test("enlarging the viewport clears a jump state once all messages fit", async (
   await expect(page.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
 });
 
-test("organic Agent tool rows use a generic jump until unseen prose adds a count", async ({
+test("collapsed Agent tool growth stays compact until unseen prose adds a count", async ({
   page,
 }) => {
   const messages: LiveView["agent"] = [
@@ -230,19 +230,18 @@ test("organic Agent tool rows use a generic jump until unseen prose adds a count
   await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
   await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
 
-  let priorHeight = await viewport.evaluate((element) => element.scrollHeight);
+  const priorHeight = await viewport.evaluate((element) => element.scrollHeight);
   for (let index = 2; index <= 4; index++) {
     messages.push(toolMessage(`agent-tool-${index}`));
-    await expect
-      .poll(() => viewport.evaluate((element) => element.scrollHeight))
-      .toBeGreaterThan(priorHeight);
-    priorHeight = await viewport.evaluate((element) => element.scrollHeight);
+    await expect(page.locator(".activity-group__trigger")).toContainText(`${index} activities`);
   }
-  await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
-  await expect(section.getByRole("button", { name: "Jump to latest", exact: true })).toBeVisible();
-  await expect(section.getByRole("button", { name: /new messages?\. Jump to latest/ })).toHaveCount(
-    0,
-  );
+  await expect
+    .poll(() =>
+      viewport.evaluate((element, height) => Math.abs(element.scrollHeight - height), priorHeight),
+    )
+    .toBeLessThanOrEqual(1);
+  await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
+  await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
 
   messages.push({
     id: "agent-new-prose",
@@ -256,7 +255,7 @@ test("organic Agent tool rows use a generic jump until unseen prose adds a count
   ).toBeVisible();
 });
 
-test("offscreen tool growth activates a generic jump control and mixed prose adds the count", async ({
+test("collapsed tail tools do not create a false jump before mixed prose adds the count", async ({
   page,
 }) => {
   const view: LiveView = {
@@ -291,19 +290,18 @@ test("offscreen tool growth activates a generic jump control and mixed prose add
   await page.mouse.wheel(0, -1);
   await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
 
-  let priorHeight = await viewport.evaluate((element) => element.scrollHeight);
-  for (let index = 3; index <= 8 && !(await tailBelowViewport(viewport)); index++) {
+  const priorHeight = await viewport.evaluate((element) => element.scrollHeight);
+  for (let index = 3; index <= 8; index++) {
     view.agent.push(toolMessage(`tool-${index}`));
-    await expect
-      .poll(() => viewport.evaluate((element) => element.scrollHeight))
-      .toBeGreaterThan(priorHeight);
-    priorHeight = await viewport.evaluate((element) => element.scrollHeight);
+    await expect(page.locator(".activity-group__trigger")).toContainText(`${index} activities`);
   }
-  await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
-  await expect(section.getByRole("button", { name: "Jump to latest", exact: true })).toBeVisible();
-  await expect(section.getByRole("button", { name: /new messages?\. Jump to latest/ })).toHaveCount(
-    0,
-  );
+  await expect
+    .poll(() =>
+      viewport.evaluate((element, height) => Math.abs(element.scrollHeight - height), priorHeight),
+    )
+    .toBeLessThanOrEqual(1);
+  await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
+  await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
 
   view.agent.push({
     id: "mixed-prose",

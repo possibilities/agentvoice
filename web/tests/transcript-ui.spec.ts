@@ -106,7 +106,9 @@ test("windowing keeps a bounded DOM for a 2,000-message transcript", async ({ pa
   expect(await page.locator("[data-windowed-row-key]").count()).toBeLessThan(40);
 });
 
-test("settled activity disclosures remain separate measured rows", async ({ page }) => {
+test("settled activity children remain reachable inside one measured group row", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1000, height: 1600 });
   await page.locator("main").evaluate((element) => {
     element.style.height = "1500px";
@@ -138,11 +140,14 @@ test("settled activity disclosures remain separate measured rows", async ({ page
       { id: "after", role: "assistant", content: "After activity", status: "complete" },
     ]);
   });
-  const triggers = page.locator(".tool-disclosure__trigger");
+  const group = page.locator(".activity-group__trigger");
+  await expect(group).toContainText("5 activities");
+  await group.click();
+  const triggers = page.locator(".activity-group__items .tool-disclosure__trigger");
   await expect(triggers).toHaveCount(5);
   for (const trigger of await triggers.all()) await trigger.click();
   await expect(page.getByLabel(/Output/, { exact: true })).toHaveCount(5);
-  await expect(page.locator(".activity-group")).toHaveCount(0);
+  await expect(page.locator(".activity-group")).toHaveCount(1);
   await expect
     .poll(() =>
       page.locator("[data-windowed-row-key]").evaluateAll((rows) =>

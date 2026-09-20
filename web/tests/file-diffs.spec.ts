@@ -80,6 +80,10 @@ test("file operations use ordered attachments with Pierre diffs and original evi
     ]);
   });
 
+  const group = page.locator(".activity-group__trigger");
+  await expect(group).toContainText("5 activities");
+  await expect(group).toContainText("4 file changes");
+  await group.click();
   const row = page.locator('.tool-disclosure[data-transcript-type="tool-call"]', {
     hasText: "File change",
   });

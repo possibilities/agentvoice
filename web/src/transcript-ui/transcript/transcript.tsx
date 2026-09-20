@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { ArrowDownIcon } from "lucide-react";
 import { memo, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ActivityGroup } from "../components/chat/activity-group";
 import { ChatMessage } from "../components/chat/chat-message";
 import { RoutingContextActivity } from "../components/chat/routing-context-activity";
 import {
@@ -87,6 +88,8 @@ export interface TranscriptBlockProps {
 const BlockContent = memo(function BlockContent({ block }: TranscriptBlockProps) {
   return block.kind === "routing-context" ? (
     <RoutingContextActivity messages={block.messages} context={block.context} />
+  ) : block.kind === "activity" ? (
+    <ActivityGroup items={block.items} />
   ) : (
     <ChatMessage message={block.message} />
   );
@@ -102,6 +105,24 @@ const TranscriptItem = memo(function TranscriptItem({ block }: TranscriptBlockPr
 
 function renderTranscriptBlock(block: TranscriptEntry) {
   return <BlockContent block={block} />;
+}
+
+function sameActivityItem(
+  current: Extract<TranscriptEntry, { kind: "activity" }>["items"][number],
+  prior: Extract<TranscriptEntry, { kind: "activity" }>["items"][number],
+) {
+  if (current.kind !== prior.kind) return false;
+  if (current.kind === "message" && prior.kind === "message") {
+    return current.message === prior.message;
+  }
+  if (current.kind === "routing-context" && prior.kind === "routing-context") {
+    return (
+      current.messages.length === prior.messages.length &&
+      current.messages.every((message, index) => message === prior.messages[index]) &&
+      JSON.stringify(current.context) === JSON.stringify(prior.context)
+    );
+  }
+  return false;
 }
 
 function useTranscriptBlocks(messages: readonly Message[]) {
@@ -126,6 +147,12 @@ function useTranscriptBlocks(messages: readonly Message[]) {
         ? prior
         : block;
     }
+    if (block.kind === "activity" && prior.kind === "activity") {
+      return block.items.length === prior.items.length &&
+        block.items.every((item, index) => sameActivityItem(item, prior.items[index]!))
+        ? prior
+        : block;
+    }
     return block;
   });
   if (next.length === previous.length && next.every((block, index) => block === previous[index])) {
@@ -136,7 +163,7 @@ function useTranscriptBlocks(messages: readonly Message[]) {
   return next;
 }
 
-/** A single transcript message or routing update disclosure, for host-owned layouts. */
+/** A single prose message or collapsed activity run, for host-owned layouts. */
 export function TranscriptBlock({ block }: TranscriptBlockProps) {
   return (
     <div className="agentchats-transcript">

@@ -78,11 +78,18 @@ test("lifecycle rows disappear while ordinary collaboration activity stays order
     item: { ...item, id: "send", kind: "interacted" },
   })!;
   expect(interaction.role).toBe("tool");
-  expect(
-    groupTranscript([interaction, start, end, nextEnd, { ...interaction, id: "send-2" }]).map(
-      (block) => block.id,
-    ),
-  ).toEqual([interaction.id, "send-2"]);
+  const blocks = groupTranscript([
+    interaction,
+    start,
+    end,
+    nextEnd,
+    { ...interaction, id: "send-2" },
+  ]);
+  expect(blocks.map((block) => block.id)).toEqual([interaction.id]);
+  expect(blocks[0]?.kind === "activity" ? blocks[0].items.map(({ id }) => id) : []).toEqual([
+    interaction.id,
+    "send-2",
+  ]);
   expect(new Set([start.id, end.id, nextEnd.id]).size).toBe(3);
 });
 

@@ -294,8 +294,10 @@ work execution. Projected voice handoffs remain readable Human rows with an
 accessible microphone details trigger;
 raw Voice observations are not a second visual lane. It has one full-transcript
 surface; top-level Human and Agent messages plus one generic Tool call disclosure
-render observed events without a parallel card system. Specialized attachments
-stay inside Tool call details. _Avoid_: raw Voice lane, pane preference,
+render observed events without a parallel card system. Eligible consecutive Tool
+calls may share one compact counted disclosure; expansion retains their generic
+Tool call blocks and details. Specialized attachments stay inside Tool call details.
+_Avoid_: raw Voice lane, pane preference,
 bespoke event card, lifecycle event row, messages-only detail mode, shared
 AgentChats package, vendor archive, cross-checkout UI import.
 

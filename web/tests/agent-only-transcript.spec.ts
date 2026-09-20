@@ -137,6 +137,10 @@ for (const viewport of [
     expect((await agent.boundingBox())?.y).toBe(0);
     await expect(page.getByRole("textbox", { name: "Message Agent" })).toBeVisible();
     await expect(agent.getByRole("button", { name: "Command bun run test" })).toBeVisible();
+    const activityGroup = agent.locator(".activity-group__trigger");
+    await expect(activityGroup).toContainText("2 activities");
+    await expect(activityGroup).toContainText("1 file change");
+    await activityGroup.click();
     for (const label of ["Context compaction", "File change", "Routing context"])
       await expect(
         agent.locator('.tool-disclosure[data-transcript-type="tool-call"]', { hasText: label }),

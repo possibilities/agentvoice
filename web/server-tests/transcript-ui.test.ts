@@ -3,10 +3,14 @@ import {
   createCodexTranscriptSource,
   parseCodexMessagePresentation,
 } from "../src/transcript-ui/transcript/codex.ts";
-import { groupTranscript, mergeTranscript } from "../src/transcript-ui/transcript/index.ts";
+import {
+  activitySummary,
+  groupTranscript,
+  mergeTranscript,
+} from "../src/transcript-ui/transcript/index.ts";
 
 describe("owned transcript data surface", () => {
-  test("keeps consecutive activities as organic disclosures in message order", () => {
+  test("collapses consecutive tool activities without changing message order", () => {
     const messages = [
       { id: "answer", role: "assistant", content: "Answer", status: "complete" },
       { id: "tool-1", role: "tool", content: "one", status: "complete" },
@@ -14,11 +18,13 @@ describe("owned transcript data surface", () => {
       { id: "next", role: "assistant", content: "Next", status: "complete" },
     ] as const;
     const blocks = groupTranscript(messages);
-    expect(blocks.map((block) => block.id)).toEqual(["answer", "tool-1", "tool-2", "next"]);
-    expect(blocks.every((block) => block.kind === "message")).toBe(true);
+    expect(blocks.map((block) => block.id)).toEqual(["answer", "tool-1", "next"]);
+    const activity = blocks[1];
+    if (activity?.kind !== "activity") throw new Error("Expected activity group");
+    expect(activity.items.map((item) => item.id)).toEqual(["tool-1", "tool-2"]);
   });
 
-  test("keeps canonical and unavailable file operations as ordered top-level rows", () => {
+  test("groups file and routing tools while explicit system evidence stays standalone", () => {
     const tool = (id: string) => ({
       id,
       role: "tool" as const,
@@ -54,23 +60,79 @@ describe("owned transcript data surface", () => {
         state: "complete" as const,
       },
     };
+    const routing = (id: string, revision: number) => ({
+      id,
+      role: "system" as const,
+      content: "Routing context updated.",
+      status: "complete" as const,
+      nativeItemType: "agentusage.routing_context",
+      routingContext: {
+        revision,
+        generation: 1,
+        mode: revision === 1 ? ("full" as const) : ("delta" as const),
+      },
+    });
+    const compaction = {
+      id: "compaction",
+      role: "system" as const,
+      content: "Older context was summarized.",
+      status: "complete" as const,
+      nativeItemType: "contextCompaction",
+    };
+    const status = {
+      id: "status",
+      role: "system" as const,
+      content: "Reader recovered.",
+      status: "complete" as const,
+      nativeItemType: "recovery",
+    };
+    const failed = {
+      ...tool("command-failed"),
+      status: "error" as const,
+      toolActivity: {
+        name: "Command",
+        detail: "command-failed",
+        state: "error" as const,
+      },
+    };
     const blocks = groupTranscript([
       tool("command-1"),
-      tool("command-2"),
       file,
-      tool("command-3"),
-      tool("command-4"),
+      routing("routing-1", 1),
+      routing("routing-2", 2),
+      failed,
+      compaction,
+      status,
       unavailable,
     ]);
 
     expect(blocks.map((block) => [block.kind, block.id])).toEqual([
-      ["message", "command-1"],
-      ["message", "command-2"],
-      ["message", "files"],
-      ["message", "command-3"],
-      ["message", "command-4"],
-      ["message", "files-unavailable"],
+      ["activity", "command-1"],
+      ["message", "compaction"],
+      ["message", "status"],
+      ["activity", "files-unavailable"],
     ]);
+    const activity = blocks[0];
+    if (activity?.kind !== "activity") throw new Error("Expected activity group");
+    expect(activity.items.map((item) => item.id)).toEqual([
+      "command-1",
+      "files",
+      "routing-1",
+      "command-failed",
+    ]);
+    expect(
+      activity.items[2]?.kind === "routing-context" ? activity.items[2].messages : [],
+    ).toHaveLength(2);
+    expect(activitySummary(activity.items)).toEqual({
+      kinds: [
+        ["Command", 2],
+        ["Files", 1],
+        ["Routing context", 1],
+      ],
+      errors: 1,
+      running: 0,
+      files: 1,
+    });
   });
 
   test("merges updates by stable identity and keeps the newest cursor", () => {

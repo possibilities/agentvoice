@@ -52,6 +52,11 @@ test("windowed collaboration tools keep every detail reachable after polling", a
   await expect(agent.getByLabel("Agent thread", { exact: true })).toHaveText("thread-interaction");
 
   const tools = agent.locator(".tool-disclosure");
+  await expect(tools).toHaveCount(1);
+  const group = agent.locator(".activity-group__trigger");
+  await expect(group).toContainText("2 activities");
+  await group.focus();
+  await group.press("Enter");
   await expect(tools).toHaveCount(3);
 
   for (const action of ["Started", "Completed"]) {
@@ -90,7 +95,8 @@ test("windowed collaboration tools keep every detail reachable after polling", a
   });
   await followup.scrollIntoViewIfNeeded();
   await expect(followup).toBeInViewport();
-  await expect(agent.locator(".activity-group")).toHaveCount(0);
+  await expect(group).toContainText("3 activities");
+  await expect(group).toHaveAttribute("aria-expanded", "true");
 });
 
 test("in-surface loading reveals Agent history without waiting for Voice history", async ({
