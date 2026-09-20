@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/colla
 import { ChatMessage } from "./chat-message";
 import { IdentityRow } from "./identity-row";
 import { RoutingContextActivity } from "./routing-context-activity";
+import { ToolActivityGroupContext } from "./tool-activity-message";
 
 function activityKindLabel(name: string, count: number) {
   if (name === "Command") return count === 1 ? "command" : "commands";
@@ -48,7 +49,6 @@ export const ActivityGroup = memo(function ActivityGroup({
       <IdentityRow identity="group">
         <div className="identity-row__content">
           <CollapsibleTrigger className="activity-group__trigger" data-open={open || undefined}>
-            <ChevronRightIcon className="tool-disclosure__chevron" aria-hidden="true" />
             <span className="activity-group__count">{items.length} activities</span>
             <span className="activity-group__summary">
               {kinds
@@ -62,18 +62,21 @@ export const ActivityGroup = memo(function ActivityGroup({
                 {files} file {files === 1 ? "change" : "changes"}
               </span>
             ) : null}
+            <ChevronRightIcon className="tool-disclosure__chevron" aria-hidden="true" />
           </CollapsibleTrigger>
+          <CollapsibleContent>
+            {open ? (
+              <ToolActivityGroupContext.Provider value={true}>
+                <div className="activity-group__items">
+                  {items.map((item) => (
+                    <ActivityItem key={item.id} item={item} />
+                  ))}
+                </div>
+              </ToolActivityGroupContext.Provider>
+            ) : null}
+          </CollapsibleContent>
         </div>
       </IdentityRow>
-      <CollapsibleContent>
-        {open ? (
-          <div className="activity-group__items">
-            {items.map((item) => (
-              <ActivityItem key={item.id} item={item} />
-            ))}
-          </div>
-        ) : null}
-      </CollapsibleContent>
     </Collapsible>
   );
 });

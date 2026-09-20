@@ -147,8 +147,8 @@ for (const width of [1440, 800, 390, 320]) {
         return {
           x: body.getBoundingClientRect().x,
           center: icon.getBoundingClientRect().y + 8 - body.getBoundingClientRect().y,
-          background: style.backgroundColor,
-          border: style.borderLeftWidth,
+          background: getComputedStyle(row).backgroundColor,
+          border: getComputedStyle(row).borderLeftWidth,
           width: body.getBoundingClientRect().width,
           available:
             content.getBoundingClientRect().width -
@@ -167,6 +167,39 @@ for (const width of [1440, 800, 390, 320]) {
     expect(geometry[2]!.border).toBe("2px");
     expect(geometry[0]!.background).toBe(geometry[2]!.background);
     expect(geometry[1]!.background).toBe("rgba(0, 0, 0, 0)");
+    const bulletGeometry = await rows.evaluateAll((elements) =>
+      elements.map((row) => {
+        const icon = row.querySelector(".identity-row__mark svg")!.getBoundingClientRect();
+        const text = row
+          .querySelector(".markdown-content, .activity-group__count, .tool-disclosure__name")!
+          .getBoundingClientRect();
+        return { icon: icon.x, text: text.x, gap: text.x - icon.right };
+      }),
+    );
+    for (const geometry of bulletGeometry) {
+      expect(Math.abs(geometry.icon - bulletGeometry[0]!.icon)).toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.text - bulletGeometry[0]!.text)).toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.gap - 8)).toBeLessThanOrEqual(1);
+    }
+    const humanSurfaces = await page
+      .locator('.identity-row:is([data-identity="human"], [data-identity="voice"])')
+      .evaluateAll((elements) =>
+        elements.map((row) => {
+          const surface = row.getBoundingClientRect();
+          return [
+            ...row.querySelectorAll(".identity-row__mark svg, .voice-message-modal__trigger"),
+          ].every((element) => {
+            const rect = element.getBoundingClientRect();
+            return (
+              rect.left >= surface.left &&
+              rect.right <= surface.right &&
+              rect.top >= surface.top &&
+              rect.bottom <= surface.bottom
+            );
+          });
+        }),
+      );
+    expect(humanSurfaces).toEqual([true, true]);
     const inspect = page.getByRole("button", { name: "Open voice message details" });
     const target = await inspect.boundingBox();
     expect(target?.width).toBe(width <= 640 ? 44 : 28);
@@ -188,11 +221,40 @@ for (const width of [1440, 800, 390, 320]) {
     const child = page.locator(".activity-group__items .tool-disclosure__trigger").first();
     await child.press("Space");
     await expect(page.getByLabel("Output", { exact: true })).toBeVisible();
-    await expect(page.locator(".activity-group__items .identity-row")).toHaveCount(3);
-    const starts = await page
-      .locator('.identity-row[data-identity="group"], .activity-group__items .identity-row')
-      .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().x));
-    expect(new Set(starts).size).toBe(1);
+    const activityGroup = page.locator(".activity-group");
+    const items = activityGroup.locator(".activity-group__items");
+    await expect(items.locator(".tool-disclosure")).toHaveCount(3);
+    await expect(
+      activityGroup.getByRole("img", { name: "Tool activities", exact: true }),
+    ).toHaveCount(1);
+    await expect(activityGroup.locator(".identity-row__mark svg")).toHaveCount(1);
+    await expect(activityGroup.locator(".identity-row")).toHaveCount(1);
+    await expect(activityGroup.locator(".identity-row__actions")).toHaveCount(1);
+    await expect(
+      items.locator(".identity-row, .identity-row__mark, .identity-row__actions"),
+    ).toHaveCount(0);
+    await expect(items.getByRole("img", { name: "Tool", exact: true })).toHaveCount(0);
+    await expect(child).toHaveAccessibleDescription(/2026/);
+    const standalone = page.locator(".tool-disclosure").filter({ hasText: "Compacting context" });
+    await expect(standalone.getByRole("img", { name: "Tool", exact: true })).toHaveCount(1);
+    const alignment = await activityGroup.evaluate((element) => {
+      const header = element.querySelector(".activity-group__trigger")!.getBoundingClientRect();
+      return [...element.querySelectorAll(".activity-group__items .tool-disclosure__trigger")].map(
+        (trigger) => {
+          const rect = trigger.getBoundingClientRect();
+          return {
+            left: rect.left - header.left,
+            right: rect.right - header.right,
+            width: rect.width - header.width,
+          };
+        },
+      );
+    });
+    for (const bounds of alignment) {
+      expect(Math.abs(bounds.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(bounds.right)).toBeLessThanOrEqual(1);
+      expect(Math.abs(bounds.width)).toBeLessThanOrEqual(1);
+    }
     for (const tool of await page.locator(".tool-disclosure").all())
       await expect(tool).toHaveCSS("border-bottom-width", "0px");
     await expect(group).toHaveCSS("text-decoration-line", "none");
@@ -231,6 +293,18 @@ test.describe("coarse pointer", () => {
     const action = page.getByRole("button", { name: "Open voice message details" });
     expect((await action.boundingBox())?.width).toBe(44);
     expect((await action.boundingBox())?.height).toBe(44);
+    expect(
+      await action.evaluate((element) => {
+        const action = element.getBoundingClientRect();
+        const surface = element.closest(".identity-row")!.getBoundingClientRect();
+        return (
+          action.top >= surface.top &&
+          action.bottom <= surface.bottom &&
+          action.left >= surface.left &&
+          action.right <= surface.right
+        );
+      }),
+    ).toBe(true);
     await page.screenshot({ path: "test-results/identity-rails-coarse.png" });
   });
 });

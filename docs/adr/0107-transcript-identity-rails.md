@@ -31,6 +31,26 @@ and file-change counts retain their existing content and responsive behavior.
 Tool and group rows have no horizontal divider or underline. Standalone system
 Tools remain standalone, and lifecycle rows remain filtered.
 
+Amended 2026-09-20: all top-level identities use a 16-pixel column and an
+eight-pixel text gap, with a shared 16-pixel row inset. Human/Voice chrome wraps
+the entire identity row, including its glyph and voice action; the two-pixel rule
+replaces two pixels of that inset so content stays aligned with Agent and Tool
+rows. The voice action retains 28/44-pixel desktop/narrow-or-coarse targets inside
+the Human surface. The group disclosure chevron trails its summary so the count
+shares the same text start.
+
+Ordered lists also place their decimal marker column at the ordinary prose edge,
+with a hanging text inset sized for the largest marker. Native ordered-list/start
+semantics remain. Unordered-list marker, padding, spacing and wrapping rules stay
+unchanged.
+
+An ActivityGroup owns the only Tool identity glyph for its
+expanded list. Its tool, file-change, and routing children render directly in the
+group's middle content column, without identity or action rails of their own.
+Their disclosure content, state, keys and eight-pixel rhythm remain; standalone
+Tools retain the full identity row. Known child timestamps are associated with
+the child disclosure trigger when its identity mark is absent.
+
 The existing Message, Bubble, Marker, Collapsible and Dialog primitives own their
 content and interactions. WindowedTranscript additionally retains at most one
 focused row outside its ordinary window, including while its portaled dialog is

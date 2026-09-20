@@ -3,6 +3,8 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import {
   Children,
   type ComponentPropsWithoutRef,
+  type CSSProperties,
+  cloneElement,
   isValidElement,
   memo,
   type ReactNode,
@@ -205,8 +207,48 @@ function MarkdownLink({
   );
 }
 
+type NumberedItemProps = ComponentPropsWithoutRef<"li"> & { "data-ordered-marker"?: string };
+
+/** Keep decimal markers at the prose edge while every text line hangs together. */
+function OrderedList({
+  children,
+  start,
+  reversed,
+  style,
+  node: _node,
+  ...props
+}: ComponentPropsWithoutRef<"ol"> & { node?: unknown }) {
+  const items = Children.toArray(children);
+  const count = items.filter((child) => isValidElement(child) && child.type === "li").length;
+  let ordinal = start ?? (reversed ? count : 1);
+  let markerWidth = 2;
+  const numbered = items.map((child) => {
+    if (!isValidElement<NumberedItemProps>(child) || child.type !== "li") return child;
+    const value = child.props.value;
+    if ((typeof value === "number" || typeof value === "string") && Number.isInteger(Number(value)))
+      ordinal = Number(value);
+    const marker = `${ordinal}.`;
+    ordinal += reversed ? -1 : 1;
+    markerWidth = Math.max(markerWidth, marker.length);
+    return cloneElement(child, { "data-ordered-marker": marker });
+  });
+  return (
+    <ol
+      {...props}
+      start={start}
+      reversed={reversed}
+      // biome-ignore lint/a11y/noRedundantRoles: Preserve Safari list semantics when native marker styling is removed.
+      role="list"
+      style={{ ...style, "--ordered-marker-width": `${markerWidth}ch` } as CSSProperties}
+    >
+      {numbered}
+    </ol>
+  );
+}
+
 const markdownComponents: Components = {
   pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+  ol: OrderedList,
   a: MarkdownLink,
 };
 

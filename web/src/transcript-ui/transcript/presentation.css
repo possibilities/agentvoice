@@ -84,23 +84,32 @@
 }
 [data-slot="message-content"] {
   gap: 8px;
-  padding-inline: 16px;
+  padding: 0;
 }
 /* The measured block owns vertical spacing; rails only place its identity and action. */
 .identity-row {
-  --identity-rail-width: 24px;
+  --identity-rail-width: 16px;
   --identity-action-width: 28px;
-  --identity-rail-gap: 12px;
+  --identity-rail-gap: 8px;
   --identity-mark-top: 6px;
   display: grid;
   grid-template-columns: var(--identity-rail-width) minmax(0, 1fr) var(--identity-action-width);
   align-items: start;
   column-gap: var(--identity-rail-gap);
+  padding-inline: 16px;
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
 }
+/* Human chrome surrounds the identity and action too. The border replaces
+   two pixels of inset so all message types keep the same icon and text starts. */
 .identity-row[data-identity="human"],
-.identity-row[data-identity="voice"] { --identity-mark-top: 18px; }
+.identity-row[data-identity="voice"] {
+  padding-block: 12px;
+  padding-left: 14px;
+  border-left: 2px solid var(--line);
+  background: var(--field);
+}
 .identity-row[data-identity="tool"],
 .identity-row[data-identity="group"] { --identity-mark-top: 10px; }
 .identity-row > * { min-width: 0; }
@@ -115,11 +124,10 @@
 .identity-row__actions {
   display: flex;
   justify-content: center;
-  padding-top: calc(26px - var(--identity-action-width) / 2);
+  align-items: center;
+  height: 28px;
 }
-.identity-row__actions:empty { padding: 0; }
-.identity-row__content,
-.identity-row > [data-slot="marker-content"] { padding-inline: 16px; }
+.identity-row__actions:empty { height: 0; }
 .message-delivery-status {
   min-width: 0;
   color: var(--muted);
@@ -149,13 +157,6 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-}
-/* Input and output share a reading edge. The inset identifies Human input
-   even without color; replies stay on the continuous canvas. */
-[data-slot="message"][data-role="user"] [data-slot="message-content"] {
-  padding: 12px 16px 12px 14px;
-  border-left: 2px solid var(--line);
-  background: var(--field);
 }
 .markdown-content {
   min-width: 0;
@@ -197,8 +198,7 @@
 .markdown-content strong {
   font-weight: 600;
 }
-.markdown-content ul,
-.markdown-content ol {
+.markdown-content ul {
   padding-left: 2ch;
   list-style-position: outside;
 }
@@ -206,7 +206,22 @@
   list-style-type: disc;
 }
 .markdown-content ol {
-  list-style-type: decimal;
+  padding-left: 0;
+  list-style-type: none;
+}
+.markdown-content ol > li {
+  position: relative;
+  padding-left: calc(var(--ordered-marker-width, 2ch) + 1ch);
+}
+.markdown-content ol > li::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--ordered-marker-width, 2ch);
+  content: attr(data-ordered-marker);
+  color: var(--muted);
+  text-align: left;
+  white-space: nowrap;
 }
 .markdown-content li + li {
   margin-top: 4px;
@@ -550,12 +565,13 @@
   min-width: 0;
 }
 .activity-group__trigger {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
   min-height: 36px;
-  padding: 6px 0;
+  padding: 6px 24px 6px 0;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -563,6 +579,11 @@
   text-align: left;
   text-decoration: none;
   box-shadow: none;
+}
+.activity-group__trigger > .tool-disclosure__chevron {
+  position: absolute;
+  top: 11px;
+  right: 0;
 }
 .activity-group__trigger:hover {
   color: var(--text);
@@ -965,13 +986,14 @@
   .chat-transcript { --transcript-row-gap: 20px; padding-block: 20px 40px; }
   .thread-intro h1 { font-size: 20px; }
   .thread-intro p > :last-child { margin-left: 0; }
-  .identity-row { --identity-rail-width: 20px; --identity-action-width: 44px; --identity-rail-gap: 8px; }
+  .identity-row { --identity-action-width: 44px; }
   .identity-row[data-identity="tool"],
   .identity-row[data-identity="group"] { --identity-mark-top: 14px; }
   .activity-group__trigger { min-height: 44px; padding-block: 12px; flex-wrap: wrap; row-gap: 4px; }
+  .activity-group__trigger > .tool-disclosure__chevron { top: 15px; }
   .activity-group__count { flex: 1; }
   .activity-group__summary { display: none; }
-  .activity-group__files { flex-basis: calc(100% - 24px); margin-left: 24px; }
+  .activity-group__files { flex-basis: 100%; }
   .tool-disclosure__trigger { min-height: 44px; padding-block: 12px; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; }
   .tool-disclosure__name { grid-column: 1; grid-row: 1; }
   .tool-disclosure__summary { grid-column: 1; grid-row: 2; }
@@ -985,6 +1007,7 @@
 }
 @media (pointer: coarse) {
   .identity-row { --identity-action-width: 44px; }
+  .activity-group__trigger > .tool-disclosure__chevron { top: 15px; }
   .identity-row[data-identity="tool"],
   .identity-row[data-identity="group"] { --identity-mark-top: 14px; }
   .tool-disclosure__trigger,

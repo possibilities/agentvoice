@@ -148,18 +148,16 @@ for (const viewport of [
 
     const humanRows = agent.locator('[data-slot="message"][data-role="user"]');
     await expect(humanRows).toHaveCount(2);
-    const humanChrome = await humanRows
-      .locator('[data-slot="message-content"]')
-      .evaluateAll((rows) =>
-        rows.map((row) => {
-          const style = getComputedStyle(row);
-          return {
-            backgroundColor: style.backgroundColor,
-            borderLeftColor: style.borderLeftColor,
-            borderLeftWidth: style.borderLeftWidth,
-          };
-        }),
-      );
+    const humanChrome = await humanRows.locator(".identity-row").evaluateAll((rows) =>
+      rows.map((row) => {
+        const style = getComputedStyle(row);
+        return {
+          backgroundColor: style.backgroundColor,
+          borderLeftColor: style.borderLeftColor,
+          borderLeftWidth: style.borderLeftWidth,
+        };
+      }),
+    );
     expect(humanChrome[0]).toEqual(humanChrome[1]);
     expect(humanChrome[0]?.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
     expect(humanChrome[0]?.borderLeftWidth).toBe("2px");
