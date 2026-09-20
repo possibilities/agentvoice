@@ -3,7 +3,7 @@ import { canonicalAgentPathSchema } from "../events/conversation.ts";
 import type { ThreadMonitor } from "./monitor.ts";
 
 /** Public metadata contract for independent read-only clients; never a socket descriptor. */
-export const THREAD_MONITOR_EXPORT_VERSION = 3;
+export const THREAD_MONITOR_EXPORT_VERSION = 4;
 export const THREAD_MONITOR_EXPORT_MAX_BYTES = 1024 * 1024;
 const MAX_THREADS = 256;
 const identity = z
@@ -54,6 +54,8 @@ const exportedThreadSchema = z
       .object({
         id: identity,
         status: z.enum(["inProgress", "completed", "interrupted", "failed"]),
+        startedAt: z.number().int().safe().nonnegative().optional(),
+        completedAt: z.number().int().safe().nonnegative().optional(),
       })
       .strict()
       .nullable(),
@@ -179,7 +181,18 @@ export function exportThreadMonitor(
           name: thread.name,
           status: thread.status,
           activeFlags: thread.activeFlags,
-          turn: thread.turn ? { id: thread.turn.id, status: thread.turn.status } : null,
+          turn: thread.turn
+            ? {
+                id: thread.turn.id,
+                status: thread.turn.status,
+                ...(thread.turn.startedAt === undefined
+                  ? {}
+                  : { startedAt: thread.turn.startedAt }),
+                ...(thread.turn.completedAt === undefined
+                  ? {}
+                  : { completedAt: thread.turn.completedAt }),
+              }
+            : null,
           model: thread.model,
           effort: thread.effort,
           nickname: thread.nickname,

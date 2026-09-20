@@ -229,7 +229,7 @@ tools. `state.get` remains lifecycle-only. See the
 [event protocol](events.md) for prefix matching, snapshots, and limits, and
 [events.schema.json](../events.schema.json) for the machine-readable event types.
 
-Event protocol **2** also exposes `conversation.*` messages, tool activity,
+Event protocol **3** also exposes `conversation.*` messages, tool activity,
 plans/diffs, reasoning, usage and errors for the orchestrator and native subagents.
 Independent UIs can request an exact live-item snapshot, replay a bounded window
 of conversation events, and page native thread/turn/item history without resuming

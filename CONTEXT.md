@@ -271,7 +271,8 @@ these retired implementations do not define its lifecycle.
 **Lifecycle feed** — The retained controller's read-only Unix event endpoint for
 current native thread state, inventory completeness, and runtime availability.
 It lasts for one workspace session across frontend attachments, projects only bounded metadata, and provides
-sequence-watermarked snapshots rather than a conversation log. _Avoid_: pipe,
+sequence-watermarked snapshots rather than a conversation log. Current-turn start
+and terminal times appear only when supplied by native turn records. _Avoid_: pipe,
 control socket.
 
 **Live voice item stream** — Typed native realtime item starts, transcript deltas,

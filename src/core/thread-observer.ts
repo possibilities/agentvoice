@@ -46,6 +46,45 @@ function nativeStatus(value: unknown): Pick<ThreadView, "status" | "activeFlags"
   };
 }
 
+function nativeTimestamp(value: unknown): number | undefined {
+  return Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : undefined;
+}
+
+function nativeTurn(value: unknown): ThreadView["turn"] | undefined {
+  const turn = record(value);
+  const id = idOf(turn["id"]);
+  const status = turn["status"];
+  if (
+    !id ||
+    !["inProgress", "completed", "failed", "interrupted"].includes(
+      typeof status === "string" ? status : "",
+    )
+  )
+    return;
+  const startedAt = nativeTimestamp(turn["startedAt"]);
+  const completedAt = status === "inProgress" ? undefined : nativeTimestamp(turn["completedAt"]);
+  return {
+    id,
+    status: status as NonNullable<ThreadView["turn"]>["status"],
+    ...(startedAt === undefined ? {} : { startedAt }),
+    ...(completedAt === undefined ? {} : { completedAt }),
+  };
+}
+
+function mergeTurn(current: ThreadView["turn"], evidence: ThreadView["turn"]): ThreadView["turn"] {
+  if (!current) return evidence;
+  if (!evidence || current.id !== evidence.id) return current;
+  const startedAt = current.startedAt ?? evidence.startedAt;
+  const completedAt =
+    current.status === "inProgress" ? undefined : (current.completedAt ?? evidence.completedAt);
+  return {
+    id: current.id,
+    status: current.status,
+    ...(startedAt === undefined ? {} : { startedAt }),
+    ...(completedAt === undefined ? {} : { completedAt }),
+  };
+}
+
 function threadFromRead(value: unknown, expectedId: string): ThreadView {
   const raw = record(record(value)["thread"]);
   if (raw["id"] !== expectedId) throw new Error("thread read identity mismatch");
@@ -59,7 +98,7 @@ function threadFromRead(value: unknown, expectedId: string): ThreadView {
   };
 }
 
-/** Observe only the owned child's live inventory. Reads never resume threads or load turns. */
+/** Observe only the owned child's live inventory. Reads never resume threads or load turn items. */
 export class ThreadObserver {
   private readonly threads = new Map<string, ThreadView>();
   private readonly pending = new Set<string>();
@@ -162,17 +201,8 @@ export class ThreadObserver {
       }
     }
     if (method.startsWith("turn/")) {
-      const turn = record(params["turn"]);
-      const turnId = idOf(turn["id"]);
-      const status = turn["status"];
-      if (
-        turnId &&
-        (status === "inProgress" ||
-          status === "completed" ||
-          status === "failed" ||
-          status === "interrupted")
-      )
-        next.turn = { id: turnId, status };
+      const turn = nativeTurn(params["turn"]);
+      if (turn) next.turn = mergeTurn(turn, next.turn);
     }
     this.threads.set(id, next);
     if (!existed) this.pending.add(id);
@@ -235,7 +265,7 @@ export class ThreadObserver {
         next.set(id, {
           ...thread,
           name: this.renamed.has(id) ? (current?.name ?? thread.name) : thread.name,
-          turn: current?.turn ?? null,
+          turn: mergeTurn(current?.turn ?? null, thread.turn),
         });
       }
       const rows = [...next.values()];
@@ -330,6 +360,15 @@ export class ThreadObserver {
               ),
               id,
             );
+            const turnRemaining = deadline - Date.now();
+            if (turnRemaining > 0) {
+              try {
+                thread.turn =
+                  (await this.readLatestTurn(id, Math.min(2_000, turnRemaining))) ?? null;
+              } catch {
+                // Older or partial native runtimes may not expose turn history.
+              }
+            }
             if (thread.status === "notLoaded") observed.delete(id);
             else observed.set(id, thread);
           } catch {
@@ -376,6 +415,11 @@ export class ThreadObserver {
             await this.request("thread/read", { threadId: id, includeTurns: false }, 2_000),
             id,
           );
+          try {
+            read.turn = (await this.readLatestTurn(id, 2_000)) ?? null;
+          } catch {
+            // Older or partial native runtimes may not expose turn history.
+          }
           if (this.stopped) return;
           const current = this.threads.get(id);
           if (!current) continue;
@@ -390,6 +434,7 @@ export class ThreadObserver {
             ...current,
             name: this.renamed.has(id) ? current.name : (current.name ?? read.name),
             parentThreadId: current.parentThreadId ?? read.parentThreadId,
+            turn: mergeTurn(current.turn, read.turn),
             ...(current === before ? { status: read.status, activeFlags: read.activeFlags } : {}),
           });
         } catch {
@@ -402,6 +447,22 @@ export class ThreadObserver {
       this.reading = false;
       this.emit();
     }
+  }
+
+  private async readLatestTurn(id: string, timeout: number): Promise<ThreadView["turn"]> {
+    const page = record(
+      await this.request(
+        "thread/turns/list",
+        { threadId: id, limit: 1, sortDirection: "desc", itemsView: "notLoaded" },
+        timeout,
+      ),
+    );
+    const rows = page["data"];
+    if (!Array.isArray(rows) || rows.length > 1) throw new Error("invalid turn metadata page");
+    if (rows.length === 0) return null;
+    const turn = nativeTurn(rows[0]);
+    if (!turn) throw new Error("invalid turn metadata");
+    return turn;
   }
 
   private scheduleRetry(): void {

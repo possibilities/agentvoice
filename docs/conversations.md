@@ -1,4 +1,4 @@
-# Conversation observation (event protocol 2)
+# Conversation observation (event protocol 3)
 
 The existing `.events.sock` endpoint exposes the native orchestrator and subagent
 conversations for independent, read-only UIs. This is an observation API, with no
@@ -7,7 +7,7 @@ RPC forwarding. Codex remains the owner of execution and persisted history.
 
 Use `agentvoice event-socket --workspace <directory>` to discover the endpoint.
 Frames use the [event protocol](events.md); [events.schema.json](../events.schema.json)
-is the complete request/response/event schema. Protocol 1 clients must update;
+is the complete request/response/event schema. Protocol 1 and 2 clients must update;
 restart the server to obtain a controller using the current event protocol.
 
 ## Identity and thread selection

@@ -9,6 +9,7 @@ const threads: Array<Record<string, unknown>> = existsSync(store)
   ? JSON.parse(readFileSync(store, "utf8"))
   : [];
 const loaded = new Set<string>();
+let handoffStarted = false;
 const full = existsSync(join(root, "native-permissions.json"))
   ? JSON.parse(readFileSync(join(root, "native-permissions.json"), "utf8"))
   : { approvalPolicy: "never", sandbox: { type: "dangerFullAccess" } };
@@ -25,17 +26,20 @@ function handle(line: string, send: (text: string) => void) {
   if (request.method === "thread/loaded/list") result = { data: [...loaded], nextCursor: null };
   if (request.method === "thread/turns/list")
     result = {
-      data: [
-        {
-          id: "handoff-turn",
-          status: "completed",
-          items:
-            params.itemsView === "full"
-              ? [{ id: "work-item", type: "agentMessage", text: "native conversation fixture" }]
-              : [],
-          itemsView: params.itemsView,
-        },
-      ],
+      data: handoffStarted
+        ? [
+            {
+              id: "handoff-turn",
+              status: "inProgress",
+              startedAt: 10,
+              items:
+                params.itemsView === "full"
+                  ? [{ id: "work-item", type: "agentMessage", text: "native conversation fixture" }]
+                  : [],
+              itemsView: params.itemsView,
+            },
+          ]
+        : [],
       nextCursor: null,
     };
   if (request.method === "thread/items/list")
@@ -112,6 +116,7 @@ function handle(line: string, send: (text: string) => void) {
     }
     result =
       mode === "malformed" ? { turn: {} } : { turn: { id: "handoff-turn", status: "inProgress" } };
+    handoffStarted = mode !== "malformed";
   }
   send(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
   if (request.method === "thread/realtime/start") {

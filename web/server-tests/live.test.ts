@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { EVENT_PROTOCOL_VERSION } from "../../src/events/contract.ts";
 import { projectItem } from "../../src/events/conversation.ts";
 import { LiveReader } from "../server/live-reader.ts";
 import { agentMessage, VoiceMessages } from "../server/messages.ts";
@@ -1199,7 +1200,7 @@ test("voice gaps and reused IDs stay fenced; unavailable native content remains 
   const messages = new VoiceMessages();
   const frame = (generation: number, event: string, data: object) =>
     JSON.stringify({
-      v: 2,
+      v: EVENT_PROTOCOL_VERSION,
       type: "event",
       event,
       data: { ...data, threadId: "thread", instanceId: "controller", generation, sequence: 1 },
@@ -1227,7 +1228,7 @@ test("voice gaps and reused IDs stay fenced; unavailable native content remains 
 test("empty voice starts remain empty across recording boundaries", () => {
   const frame = (event: string) =>
     JSON.stringify({
-      v: 2,
+      v: EVENT_PROTOCOL_VERSION,
       type: "event",
       event,
       data: {
@@ -1269,7 +1270,7 @@ test("empty pending voice stays hidden until transcript text arrives", () => {
   };
   messages.accept(
     JSON.stringify({
-      v: 2,
+      v: EVENT_PROTOCOL_VERSION,
       type: "event",
       event: "voice.item.started",
       data: {
@@ -1288,7 +1289,7 @@ test("empty pending voice stays hidden until transcript text arrives", () => {
   expect(messages.messages()).toEqual([]);
   messages.accept(
     JSON.stringify({
-      v: 2,
+      v: EVENT_PROTOCOL_VERSION,
       type: "event",
       event: "voice.item.transcript.delta",
       data: { ...data, sequence: 2, itemId: "pending", delta: "Now audible" },
@@ -1311,7 +1312,7 @@ test("recording gaps before speech do not leave a stale notice on later complete
     expect(messages.notice).toBeUndefined();
     messages.accept(
       JSON.stringify({
-        v: 2,
+        v: EVENT_PROTOCOL_VERSION,
         type: "event",
         event: "voice.item.completed",
         data: {
@@ -1344,7 +1345,7 @@ test("recording gaps before speech do not leave a stale notice on later complete
 
 test("recording boundaries preserve non-empty unfinished speech as incomplete", () => {
   const frame = JSON.stringify({
-    v: 2,
+    v: EVENT_PROTOCOL_VERSION,
     type: "event",
     event: "voice.item.started",
     data: {

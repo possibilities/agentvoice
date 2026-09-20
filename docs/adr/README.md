@@ -149,7 +149,7 @@ different decision. Keep this navigation index and the record's status together.
 - [0089: Render native file changes as top-level diff cards](0089-top-level-file-change-diffs.md) — accepted; one correlated file-change item keeps native order and status while exposing lazy Pierre diffs, exact details, and truthful bounded fallbacks.
 
 - [0090: Deliver bounded manager routing orientation](0090-deliver-manager-routing-orientation.md) — superseded by [0099](0099-retire-live-manager-routing-orientation.md); historical routing outputs remain readable.
-- [0091: Export canonical collaboration task identity](0091-export-canonical-collaboration-identity.md) — accepted; native thread-spawn paths are reconciled by exact thread ID and exported as explicit verified or error evidence.
+- [0091: Export canonical collaboration task identity](0091-export-canonical-collaboration-identity.md) — accepted and extended by [0100](0100-export-authoritative-turn-timing.md); native thread-spawn paths are reconciled by exact thread ID and exported as explicit verified or error evidence.
 
 - [0092: Defer direct-child delivery during human speech](0092-defer-direct-child-delivery-during-human-speech.md) — superseded by [0094](0094-restore-immediate-direct-child-delivery.md); the deferral was not shown to affect the reported interruptions.
 - [0093: Throttle routing-context turns and expose read-only context](0093-throttle-routing-context-turns.md) — superseded by [0099](0099-retire-live-manager-routing-orientation.md).
@@ -160,3 +160,4 @@ different decision. Keep this navigation index and the record's status together.
 
 - [0098: Explicit saved context-window edits](0098-edit-saved-role-context-window.md)
 - [0099: Retire live manager routing orientation](0099-retire-live-manager-routing-orientation.md) — accepted; removes routing polling, publication, native injection and the fresh query while preserving historical transcript cards and receipts.
+- [0100: Export authoritative current-turn timing](0100-export-authoritative-turn-timing.md) — accepted; event protocol 3 and `threads --json` version 4 carry optional native start and terminal timestamps without observation-time guesses.

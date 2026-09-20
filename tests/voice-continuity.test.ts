@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { VoiceRuntime } from "../src/core/runtime.ts";
+import { EVENT_PROTOCOL_VERSION } from "../src/events/contract.ts";
 import { recordingDirectory } from "../src/recording/store.ts";
 import { VoiceRecording } from "../src/recording/writer.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
@@ -60,7 +61,7 @@ for (const [name, history] of [
       for (const [index, [role, text]] of history.entries()) {
         const observed = item(String(index), "predecessor", role, text);
         writer.accept({
-          v: 2,
+          v: EVENT_PROTOCOL_VERSION,
           type: "event",
           event: "voice.item.completed",
           data: {

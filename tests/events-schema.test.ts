@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { buildEventsSchema } from "../scripts/generate-events-schema.ts";
+import { EVENT_PROTOCOL_VERSION } from "../src/events/contract.ts";
 import { conversationEventSchemas } from "../src/events/conversation.ts";
 import { eventSocketFrameSchema } from "../src/events/schema.ts";
 
@@ -35,11 +36,16 @@ test("events.schema.json matches its generator and exposes every named event typ
 });
 
 test("published contract rejects untyped content and unknown fields while permitting subscription defaults", () => {
-  const request = { v: 2, type: "request", id: "sub", method: "event.subscribe" };
+  const request = {
+    v: EVENT_PROTOCOL_VERSION,
+    type: "request",
+    id: "sub",
+    method: "event.subscribe",
+  };
   for (const params of [undefined, null, {}, { events: ["voice.*"] }])
     expect(eventSocketFrameSchema.safeParse({ ...request, params }).success).toBe(true);
   const frame = {
-    v: 2,
+    v: EVENT_PROTOCOL_VERSION,
     type: "event",
     event: "voice.item.transcript.delta",
     data: {
@@ -52,6 +58,42 @@ test("published contract rejects untyped content and unknown fields while permit
     },
   };
   expect(eventSocketFrameSchema.safeParse(frame).success).toBe(true);
+  const threadFrame = {
+    v: EVENT_PROTOCOL_VERSION,
+    type: "event",
+    event: "thread.state.changed",
+    data: {
+      instanceId: "instance",
+      generation: 1,
+      sequence: 2,
+      thread: {
+        id: "thread",
+        parentThreadId: null,
+        name: null,
+        status: "idle",
+        activeFlags: [],
+        turn: {
+          id: "turn",
+          status: "completed",
+          startedAt: 1_700_000_000,
+          completedAt: 1_700_000_001,
+        },
+      },
+    },
+  };
+  expect(eventSocketFrameSchema.safeParse(threadFrame).success).toBe(true);
+  expect(
+    eventSocketFrameSchema.safeParse({
+      ...threadFrame,
+      data: {
+        ...threadFrame.data,
+        thread: {
+          ...threadFrame.data.thread,
+          turn: { ...threadFrame.data.thread.turn, completedAt: -1 },
+        },
+      },
+    }).success,
+  ).toBe(false);
   expect(eventSocketFrameSchema.safeParse({ ...frame, type: undefined }).success).toBe(false);
   expect(
     eventSocketFrameSchema.safeParse({

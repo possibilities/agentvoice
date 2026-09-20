@@ -11,8 +11,9 @@ owns the current source map and recording/attachment implementation guidance.
 - src/threads/: native observer, terminal thread display and versioned `threads --json`
   export for independent metadata consumers. A fenced read combines the live
   inventory with persisted native descendant pages and reports per-row parentage
-  provenance or missing/conflicting evidence. It never infers semantic Work or an
-  exact receiving turn. AgentHUD owns its durable Work and UI in a separate
+  provenance or missing/conflicting evidence. Optional current-turn timing comes
+  only from native turn records. It never infers semantic Work or an exact
+  receiving turn. AgentHUD owns its durable Work and UI in a separate
   repository, with no cross-checkout imports or source ownership here. See
   [ADRs 0056](adr/0056-independent-agenthud.md) and
   [0068](adr/0068-durable-native-parentage-export.md).
@@ -213,7 +214,8 @@ owns the current source map and recording/attachment implementation guidance.
   delivery is not an event snapshot/replay or control API. Replacement resets
   native inventory; stale incarnations never publish into a successor or another server session. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
-  never history hydration, resume, or turns. Preserve newer notifications over late reads.
+  including one latest turn without item bodies for native timing. Never hydrate
+  conversation content or resume work. Preserve newer notifications over late reads.
 - src/core/conversation-reader.ts + conversation-items.ts: explicit read-only native
   history for controller-leased roots and verified descendants. Scope cursors to
   root/thread/turn/order and runtime generation; never resume or submit work for a

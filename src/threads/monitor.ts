@@ -5,7 +5,7 @@ import {
   type ThreadSnapshot,
   type ThreadView,
 } from "../events/contract.ts";
-import { threadDetailsSchema } from "../events/conversation.ts";
+import { conversationTurnSchema, threadDetailsSchema } from "../events/conversation.ts";
 import { eventSnapshotSchema } from "../events/schema.ts";
 import { eventSocketPath } from "../events/socket.ts";
 import { discoverServer } from "../frontend/discovery.ts";
@@ -154,6 +154,92 @@ function rowFromHistory(value: unknown): ObservedRow {
   };
 }
 
+function turnFromHistory(value: unknown): ThreadView["turn"] {
+  const turn = conversationTurnSchema.parse(value);
+  if (turn.id.length < 1 || turn.id.length > 256 || !/^[A-Za-z0-9._:-]+$/u.test(turn.id))
+    throw new Error("invalid native turn identity");
+  const startedAt =
+    Number.isSafeInteger(turn.startedAt) && (turn.startedAt ?? -1) >= 0
+      ? (turn.startedAt as number)
+      : undefined;
+  const completedAt =
+    turn.status !== "inProgress" &&
+    Number.isSafeInteger(turn.completedAt) &&
+    (turn.completedAt ?? -1) >= 0
+      ? (turn.completedAt as number)
+      : undefined;
+  return {
+    id: turn.id,
+    status: turn.status,
+    ...(startedAt === undefined ? {} : { startedAt }),
+    ...(completedAt === undefined ? {} : { completedAt }),
+  };
+}
+
+function mergeTurn(live: ThreadView["turn"], history: ThreadView["turn"]): ThreadView["turn"] {
+  if (!live) return history;
+  if (!history || live.id !== history.id) return live;
+  const startedAt = live.startedAt ?? history.startedAt;
+  const completedAt =
+    live.status === "inProgress" ? undefined : (live.completedAt ?? history.completedAt);
+  return {
+    id: live.id,
+    status: live.status,
+    ...(startedAt === undefined ? {} : { startedAt }),
+    ...(completedAt === undefined ? {} : { completedAt }),
+  };
+}
+
+async function enrichHistoricalTurns(
+  client: Reader,
+  identity: { instanceId: string; generation: number; rootThreadId: string },
+  rows: ObservedRow[],
+  expectedRevision: number | undefined,
+  deadline: number,
+): Promise<void> {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, rows.length) }, async () => {
+      while (Date.now() < deadline) {
+        const row = rows[next++];
+        if (!row) return;
+        try {
+          const result = (await client.request("conversation.turns.list", {
+            expectedInstanceId: identity.instanceId,
+            expectedGeneration: identity.generation,
+            rootThreadId: identity.rootThreadId,
+            threadId: row.id,
+            limit: 1,
+            sortDirection: "desc",
+          })) as Record<string, unknown>;
+          if (
+            result["method"] !== "conversation.turns.list" ||
+            result["instanceId"] !== identity.instanceId ||
+            result["generation"] !== identity.generation ||
+            result["rootThreadId"] !== identity.rootThreadId ||
+            result["threadId"] !== row.id ||
+            !Array.isArray(result["data"]) ||
+            result["data"].length > 1 ||
+            !Number.isSafeInteger(result["revisionBefore"]) ||
+            !Number.isSafeInteger(result["revisionAfter"]) ||
+            typeof result["changedDuringRead"] !== "boolean"
+          )
+            throw new Error("invalid native turn page");
+          if (
+            result["changedDuringRead"] ||
+            result["revisionBefore"] !== result["revisionAfter"] ||
+            (expectedRevision !== undefined && result["revisionBefore"] !== expectedRevision)
+          )
+            continue;
+          row.turn = result["data"].length ? turnFromHistory(result["data"][0]) : null;
+        } catch {
+          // Timing is optional per row; parentage/history coverage remains independent.
+        }
+      }
+    }),
+  );
+}
+
 async function readNativeDescendants(
   client: Reader,
   identity: { instanceId: string; generation: number; rootThreadId: string },
@@ -217,6 +303,7 @@ async function readNativeDescendants(
       }
     } while (cursor);
   }
+  await enrichHistoricalTurns(client, identity, rows, revision, deadline);
   return {
     rows,
     coverage: complete ? "complete" : succeeded ? "partial" : "unavailable",
@@ -321,7 +408,7 @@ function mergeRows(rootThreadId: string, rows: ObservedRow[]): ThreadRow[] {
       name: base.name,
       status: live?.status ?? "notLoaded",
       activeFlags: live?.activeFlags ?? [],
-      turn: live?.turn ?? null,
+      turn: mergeTurn(live?.turn ?? null, base.turn),
       model: live?.model ?? base.model,
       effort: live?.effort ?? base.effort,
       nickname: live?.nickname ?? base.nickname,

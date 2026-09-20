@@ -2,10 +2,10 @@
 
 Each server-owned workspace-session controller exposes a **separate read-only Unix socket**
 for thread state, transient voice items and conversation observation. The event
-protocol remains 2; the separate control API uses protocol 9 for status, voice selection, redial and restart. A new
+protocol is 3; the separate control API uses protocol 9 for status, voice selection, redial and restart. A new
 server workspace session creates a new controller and socket. Frontend detach
 preserves it; rediscover after server restart.
-Protocol-1 event clients must update.
+Protocol-1 and protocol-2 event clients must update.
 
 For typed orchestrator/subagent content, live snapshots, bounded conversation
 replay and native history reads, see [conversation observation](conversations.md).
@@ -244,22 +244,32 @@ type ThreadView = {
   name: string | null;
   status: "unknown" | "notLoaded" | "idle" | "active" | "systemError";
   activeFlags: ("waitingOnApproval" | "waitingOnUserInput")[];
-  turn: { id: string; status: "inProgress" | "completed" | "interrupted" | "failed" } | null;
+  turn: {
+    id: string;
+    status: "inProgress" | "completed" | "interrupted" | "failed";
+    startedAt?: number;   // native Unix seconds
+    completedAt?: number; // native Unix seconds for a terminal turn
+  } | null;
 };
 ```
 
 Status comes from native thread status reports. A turn completing does not
-manufacture an `idle` status. `turn` is the latest observed turn, not a history
-query; `null` means no turn notification has been observed. A native failure
-reports `failed` without forwarding error text. Names are optional and truncated
-to 256 characters. `parentThreadId: null` means no parent was reported.
+manufacture an `idle` status. `turn` is the current or newest native turn known
+from notifications or the bounded latest-turn metadata read. `null` means no turn
+evidence is available. `startedAt` and `completedAt` are copied only from native
+turn records; either may be absent on older or partial data. AgentVoice never uses
+observation time as a substitute. A native failure reports `failed` without
+forwarding error text. Names are optional and truncated to 256 characters.
+`parentThreadId: null` means no parent was reported.
 
 The inventory covers threads loaded in the **owned app-server**, including
 native subagents. It does not scan other Codex processes or native on-disk history.
 The runtime performs bounded, paginated `thread/loaded/list` reconciliation after
-native readiness, plus `thread/read` without turns for metadata. It follows
-native notifications and refreshes metadata for newly observed IDs. Observation
-does not gate audio readiness.
+native readiness, plus `thread/read` without turns for metadata and
+`thread/turns/list` with `limit: 1` and `itemsView: "notLoaded"` for timing. It
+follows native notifications and refreshes metadata for newly observed IDs.
+An unsupported or failed latest-turn read leaves timing absent without making
+otherwise valid inventory incomplete. Observation does not gate audio readiness.
 
 `ready` means the latest reconciliation and metadata reads completed without a
 known failure and at most 256 threads remain live after native `notLoaded` rows
@@ -281,7 +291,7 @@ Every event's `data` includes `{instanceId, generation, sequence}`.
 | `runtime.state.changed` | `{runtime, inventory, threads}` | Replace runtime and inventory state; treat this as a reset boundary |
 
 ```json
-{"v":2,"type":"event","event":"thread.state.changed","data":{"instanceId":"controller-id","generation":2,"sequence":19,"thread":{"id":"thread-id","parentThreadId":null,"name":null,"status":"active","activeFlags":[],"turn":{"id":"turn-id","status":"inProgress"}}}}
+{"v":3,"type":"event","event":"thread.state.changed","data":{"instanceId":"controller-id","generation":2,"sequence":19,"thread":{"id":"thread-id","parentThreadId":null,"name":null,"status":"active","activeFlags":[],"turn":{"id":"turn-id","status":"inProgress","startedAt":1789866000}}}}
 ```
 
 Quiescing, failed, and stopping runtimes clear the projection and report

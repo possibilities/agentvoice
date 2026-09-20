@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ConversationNotification } from "./conversation.ts";
 import type { VoiceNotification } from "./voice.ts";
 
-export const EVENT_PROTOCOL_VERSION = 2;
+export const EVENT_PROTOCOL_VERSION = 3;
 export const MAX_THREADS = 256;
 const id = z
   .string()
@@ -17,7 +17,12 @@ export const threadViewSchema = z
     status: z.enum(["unknown", "notLoaded", "idle", "active", "systemError"]),
     activeFlags: z.array(z.enum(["waitingOnApproval", "waitingOnUserInput"])).max(2),
     turn: z
-      .object({ id, status: z.enum(["inProgress", "completed", "interrupted", "failed"]) })
+      .object({
+        id,
+        status: z.enum(["inProgress", "completed", "interrupted", "failed"]),
+        startedAt: z.number().int().safe().nonnegative().optional(),
+        completedAt: z.number().int().safe().nonnegative().optional(),
+      })
       .strict()
       .nullable(),
   })

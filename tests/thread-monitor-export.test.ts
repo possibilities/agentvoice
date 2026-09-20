@@ -21,7 +21,7 @@ const monitor: ThreadMonitor = {
       name: "Coordinator",
       status: "active",
       activeFlags: [],
-      turn: { id: "turn", status: "inProgress" },
+      turn: { id: "turn", status: "inProgress", startedAt: 1_700_000_000 },
       parentage: { state: "root", sources: ["live_inventory"] },
       collaborationIdentity: { state: "root", sources: ["live_inventory"] },
     },
@@ -44,7 +44,7 @@ test("JSON command exports versioned exact metadata and excludes incidental priv
     }),
   ).toBe(0);
   const exported = threadMonitorExportSchema.parse(JSON.parse(output));
-  expect(exported.schemaVersion).toBe(3);
+  expect(exported.schemaVersion).toBe(4);
   expect(exported.monitor).toEqual(monitor as typeof exported.monitor);
   expect(output).not.toContain("secret");
   expect(output).not.toContain("socket");
@@ -141,7 +141,7 @@ test("ready inventory must include its parentless root; incomplete cuts can omit
     exportThreadMonitor({ ...monitor, inventory: "incomplete", threads: [] }).monitor.inventory,
   ).toBe("incomplete");
 });
-test("version three freezes native row and collaboration identity bounds", () => {
+test("version four freezes native row, timing and collaboration identity bounds", () => {
   const root = monitor.threads[0]!;
   for (const patch of [
     { id: "bad/id" },
@@ -150,6 +150,8 @@ test("version three freezes native row and collaboration identity bounds", () =>
     { name: "x".repeat(257) },
     { turn: { id: "bad/id", status: "inProgress" as const } },
     { turn: { id: "x".repeat(257), status: "inProgress" as const } },
+    { turn: { id: "turn", status: "inProgress" as const, startedAt: -1 } },
+    { turn: { id: "turn", status: "completed" as const, completedAt: 1.5 } },
   ])
     expect(() => exportThreadMonitor({ ...monitor, threads: [{ ...root, ...patch }] })).toThrow();
   const accepted = exportThreadMonitor({
@@ -161,11 +163,22 @@ test("version three freezes native row and collaboration identity bounds", () =>
         model: "x".repeat(256),
         effort: "x".repeat(256),
         nickname: "x".repeat(256),
-        turn: { id: "x".repeat(256), status: "inProgress" },
+        turn: {
+          id: "x".repeat(256),
+          status: "completed",
+          startedAt: 1_700_000_000,
+          completedAt: 1_700_000_100,
+        },
       },
     ],
   });
   expect(accepted.monitor.threads).toHaveLength(1);
+  expect(
+    exportThreadMonitor({
+      ...monitor,
+      threads: [{ ...root, turn: { id: "legacy-turn", status: "failed" } }],
+    }).monitor.threads[0]?.turn,
+  ).toEqual({ id: "legacy-turn", status: "failed" });
   expect(() =>
     exportThreadMonitor({
       ...monitor,

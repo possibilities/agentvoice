@@ -140,7 +140,7 @@ and realtime-session IDs fence reused item IDs. Recording gaps remain visible.
 Recording reads retain the existing 64 MiB file / 1 MiB record limits. Observed
 times describe transcript receipt; they do not prove when speech was heard.
 
-The Agent lane uses event protocol 2: subscribe first, validate `state.get`, then
+The Agent lane uses event protocol 3: subscribe first, validate `state.get`, then
 read `conversation.live.get` and page `conversation.items.list` newest first.
 First open shows one loading notice in the app header. Both panes remain hidden until the
 initial Agent history pass and the Voice file present at attachment are loaded,

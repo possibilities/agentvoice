@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startControlServer } from "../../src/control/index.ts";
 import { CONTROL_PROTOCOL_VERSION } from "../../src/control/types.ts";
+import { EVENT_PROTOCOL_VERSION } from "../../src/events/contract.ts";
 import { ObservationError } from "../../src/events/conversation.ts";
 import { LifecycleFeed } from "../../src/events/feed.ts";
 import { EventSocketServer, eventSocketPath } from "../../src/events/socket.ts";
@@ -192,7 +193,7 @@ export async function fixture(
     voice: (event: string, data: object) =>
       appendFileSync(
         recordingPath,
-        `${JSON.stringify({ v: 2, type: "event", event, data: { ...data, threadId, instanceId, generation, sequence: 1 }, observedAt: "2026-09-13T12:00:00Z" })}\n`,
+        `${JSON.stringify({ v: EVENT_PROTOCOL_VERSION, type: "event", event, data: { ...data, threadId, instanceId, generation, sequence: 1 }, observedAt: "2026-09-13T12:00:00Z" })}\n`,
       ),
     start: async () => {
       owner = await connectFrontend(server.path, () => {}, randomUUID());

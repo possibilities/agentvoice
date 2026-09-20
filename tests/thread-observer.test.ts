@@ -54,11 +54,21 @@ describe("native thread observation", () => {
       threadId: "child",
       status: { type: "active", activeFlags: ["waitingOnUserInput"] },
     });
+    observer.notification("turn/started", {
+      threadId: "child",
+      turn: { id: "turn-1", status: "inProgress", startedAt: 100 },
+    });
+    expect(snapshots.at(-1)?.threads[1]?.turn).toEqual({
+      id: "turn-1",
+      status: "inProgress",
+      startedAt: 100,
+    });
     observer.notification("turn/completed", {
       threadId: "child",
       turn: {
         id: "turn-1",
         status: "failed",
+        completedAt: 130,
         error: { message: "private error" },
         items: [{ text: "secret" }],
       },
@@ -66,13 +76,70 @@ describe("native thread observation", () => {
     expect(snapshots.at(-1)?.threads[1]).toMatchObject({
       status: "active",
       activeFlags: ["waitingOnUserInput"],
-      turn: { id: "turn-1", status: "failed" },
+      turn: { id: "turn-1", status: "failed", startedAt: 100, completedAt: 130 },
+    });
+    observer.notification("turn/completed", {
+      threadId: "child",
+      turn: { id: "turn-2", status: "interrupted", startedAt: 200, completedAt: 240 },
+    });
+    expect(snapshots.at(-1)?.threads[1]?.turn).toEqual({
+      id: "turn-2",
+      status: "interrupted",
+      startedAt: 200,
+      completedAt: 240,
     });
     const text = JSON.stringify(snapshots);
     for (const secret of ["conversation content", "private preview", "private error", "secret"])
       expect(text).not.toContain(secret);
     observer.notification("thread/closed", { threadId: "child" });
     expect(snapshots.at(-1)?.threads.map((thread) => thread.id)).toEqual(["main"]);
+    observer.stop();
+  });
+
+  test("reconciles bounded native turn timing and leaves unavailable timestamps absent", async () => {
+    let latest!: ThreadInventory;
+    const observer = new ThreadObserver(
+      async (method, params) => {
+        const input = params as { threadId?: string; itemsView?: string };
+        if (method === "thread/loaded/list") return { data: ["complete", "partial", "legacy"] };
+        if (method === "thread/read")
+          return { thread: { id: input.threadId, status: { type: "idle" } } };
+        expect(method).toBe("thread/turns/list");
+        expect(input.itemsView).toBe("notLoaded");
+        if (input.threadId === "legacy") throw new Error("unsupported");
+        return {
+          data: [
+            input.threadId === "complete"
+              ? {
+                  id: "turn-complete",
+                  status: "completed",
+                  startedAt: 10,
+                  completedAt: 20,
+                  items: [{ text: "private" }],
+                }
+              : { id: "turn-partial", status: "interrupted", startedAt: null },
+          ],
+        };
+      },
+      (value) => {
+        latest = structuredClone(value);
+      },
+    );
+    await observer.start();
+    await until(() => latest.complete);
+    expect(latest.complete).toBe(true);
+    expect(latest.threads.find((thread) => thread.id === "complete")?.turn).toEqual({
+      id: "turn-complete",
+      status: "completed",
+      startedAt: 10,
+      completedAt: 20,
+    });
+    expect(latest.threads.find((thread) => thread.id === "partial")?.turn).toEqual({
+      id: "turn-partial",
+      status: "interrupted",
+    });
+    expect(latest.threads.find((thread) => thread.id === "legacy")?.turn).toBeNull();
+    expect(JSON.stringify(latest)).not.toContain("private");
     observer.stop();
   });
 

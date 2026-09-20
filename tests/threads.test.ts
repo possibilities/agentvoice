@@ -269,6 +269,91 @@ describe("watchable thread inventory", () => {
     });
   });
 
+  test("hydrates authoritative timing for persisted descendants without reading turn items", async () => {
+    const live = snapshot([
+      {
+        ...thread("root"),
+        status: "active",
+        turn: { id: "root-turn", status: "inProgress", startedAt: 1_700_000_000 },
+      },
+    ]);
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    const result = await readThreadMonitor(
+      {
+        async request(method, params) {
+          const input = params as Record<string, unknown>;
+          calls.push({ method, params: input });
+          if (method === "state.get") return live;
+          if (method === "conversation.thread.get") return metadata(String(input["threadId"]));
+          if (method === "conversation.turns.list")
+            return {
+              instanceId: "call",
+              generation: 1,
+              method,
+              rootThreadId: "root",
+              threadId: "historical",
+              revisionBefore: 7,
+              revisionAfter: 7,
+              changedDuringRead: false,
+              data: [
+                {
+                  id: "historical-turn",
+                  status: "completed",
+                  startedAt: 1_699_999_900,
+                  completedAt: 1_699_999_950,
+                },
+              ],
+              nextCursor: null,
+            };
+          expect(method).toBe("conversation.threads.list");
+          return {
+            instanceId: "call",
+            generation: 1,
+            method,
+            rootThreadId: "root",
+            revisionBefore: 7,
+            revisionAfter: 7,
+            changedDuringRead: false,
+            data:
+              input["archived"] === true
+                ? []
+                : [
+                    {
+                      id: "historical",
+                      parentThreadId: "root",
+                      cwd: "/workspace",
+                      status: { type: "notLoaded" },
+                      collaborationIdentity: {
+                        state: "verified",
+                        path: "/root/historical",
+                      },
+                    },
+                  ],
+            nextCursor: null,
+          };
+        },
+      },
+      expected,
+    );
+    expect(result.threads.find((row) => row.id === "root")?.turn).toEqual({
+      id: "root-turn",
+      status: "inProgress",
+      startedAt: 1_700_000_000,
+    });
+    expect(result.threads.find((row) => row.id === "historical")?.turn).toEqual({
+      id: "historical-turn",
+      status: "completed",
+      startedAt: 1_699_999_900,
+      completedAt: 1_699_999_950,
+    });
+    expect(calls.find((call) => call.method === "conversation.turns.list")?.params).toMatchObject({
+      threadId: "historical",
+      limit: 1,
+      sortDirection: "desc",
+    });
+    expect(JSON.stringify(calls)).not.toContain("items");
+  });
+
   test("marks native history partial when descendant pages cross a native revision", async () => {
     const live = snapshot([thread("root"), thread("child", "root")]);
     let page = 0;

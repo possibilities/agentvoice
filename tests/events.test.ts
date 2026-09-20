@@ -4,7 +4,11 @@ import { createConnection, type Socket } from "node:net";
 import { join } from "node:path";
 import { startControlServer } from "../src/control/index.ts";
 import { CONTROL_PROTOCOL_VERSION } from "../src/control/types.ts";
-import type { ThreadSnapshot, ThreadView } from "../src/events/contract.ts";
+import {
+  EVENT_PROTOCOL_VERSION,
+  type ThreadSnapshot,
+  type ThreadView,
+} from "../src/events/contract.ts";
 import { projectNotification } from "../src/events/conversation.ts";
 import { LifecycleFeed } from "../src/events/feed.ts";
 import { eventSocketFrameSchema } from "../src/events/schema.ts";
@@ -56,7 +60,9 @@ async function client(path: string) {
     closed: () => closed,
     async request(method: string, params: unknown = {}) {
       const id = String(++next);
-      socket.write(`${JSON.stringify({ v: 2, type: "request", id, method, params })}\n`);
+      socket.write(
+        `${JSON.stringify({ v: EVENT_PROTOCOL_VERSION, type: "request", id, method, params })}\n`,
+      );
       await until(() => frames.some((frame) => frame["id"] === id));
       return frames.find((frame) => frame["id"] === id)!;
     },
@@ -194,7 +200,7 @@ describe("lifecycle event socket", () => {
       ]);
       expect(events.map((frame) => frame.data?.sequence)).toEqual([1, 2, 3]);
       expect(events[0] as unknown).toEqual({
-        v: 2,
+        v: EVENT_PROTOCOL_VERSION,
         type: "event",
         event: "voice.item.transcript.delta",
         data: { ...data, instanceId: "test", generation: 1, sequence: 1 },
@@ -248,10 +254,19 @@ describe("lifecycle event socket", () => {
         await only.request("event.subscribe", { events: ["thread.*", "thread.*"] }),
       ).toMatchObject({ result: { events: ["thread.*"] } });
       h.feed.update({ complete: true, threads: [thread("a")] });
-      h.feed.update({ complete: true, threads: [thread("a", "active")] });
+      h.feed.update({
+        complete: true,
+        threads: [
+          {
+            ...thread("a", "active"),
+            turn: { id: "turn-a", status: "inProgress", startedAt: 1_700_000_000 },
+          },
+        ],
+      });
       const response = await all.request("state.get");
       const snapshot = response["result"] as ThreadSnapshot;
       expect(snapshot.threads[0]?.status).toBe("active");
+      expect(snapshot.threads[0]?.turn?.startedAt).toBe(1_700_000_000);
       const before = all.frames.filter((frame) => frame["type"] === "event");
       expect(before.map((frame) => frame["event"])).toEqual([
         "threads.changed",
