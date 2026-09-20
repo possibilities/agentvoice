@@ -4,7 +4,6 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
-import { type CompletionRuntime, completionRequestSchema } from "../completions/contract.ts";
 import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceState } from "../console/state.ts";
 import type { ServerConfig } from "../core/config.ts";
@@ -37,7 +36,6 @@ export function runRuntimeWorker(
   let voiceSettings:
     | Parameters<NonNullable<ConsoleHostOptions["onVoiceSettingsReady"]>>[0]
     | undefined;
-  let completionRuntime: CompletionRuntime | undefined;
   let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
   let revokeAttachment: (() => void) | undefined;
   let issueAttachment: (() => AttachmentTicket) | undefined;
@@ -241,12 +239,6 @@ export function runRuntimeWorker(
           controlMcp: currentLaunch.control,
           acquireLease,
           onVerifiedThread: (identity) => event("identity", identity),
-          onCompletionReady: (runtime) => {
-            completionRuntime = runtime;
-          },
-          onCompletion: (observation) => {
-            if (!stopping && !terminalFailure) event("completion", observation);
-          },
           onThreads: (inventory) => {
             threadInventory = inventory;
             publish();
@@ -401,9 +393,6 @@ export function runRuntimeWorker(
         }
         return null;
       }
-      case "completion-deliver":
-        if (terminalFailure || stopping || !completionRuntime) return { status: "unavailable" };
-        return completionRuntime.deliver(completionRequestSchema.parse(params));
       case "handoff":
         if (terminalFailure || stopping || !mediaEnabled || !submitHandoff)
           return handoffFailure("not_ready");

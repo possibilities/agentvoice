@@ -1,20 +1,8 @@
 /** Foreground coordination: one owned Codex child and workspace-local native history. */
-import { createHash } from "node:crypto";
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { AttachmentGateway, type AttachmentTicket } from "../attachment/gateway.ts";
-import {
-  COMPLETION_NAMESPACE,
-  COMPLETION_OUTPUT,
-  type CompletionObservation,
-  type CompletionRuntime,
-  completionDelivery,
-  completionRequestSchema,
-  type DeliveryOutcome,
-  MAX_COMPLETION_DELIVERIES,
-} from "../completions/contract.ts";
-import { CompletionObserver } from "../completions/observer.ts";
 import type { ThreadInventory } from "../events/contract.ts";
 import {
   type ConversationNotification,
@@ -118,8 +106,6 @@ export interface RuntimeOptions {
   onChildPid?: (pid: number) => void;
   onChildReaped?: () => void;
   onThreads?: (inventory: ThreadInventory) => void;
-  onCompletion?: (observation: CompletionObservation) => void;
-  onCompletionReady?: (runtime: CompletionRuntime) => void;
   onVoice?: (notification: VoiceNotification) => void;
   onConversation?: (notification: ConversationNotification) => void;
   onShutdownOutcome?: (forced: boolean) => void;
@@ -216,11 +202,6 @@ export class VoiceRuntime {
   private privateHandoffPrompt: { raw: string; escaped: string } | undefined;
   private readonly sessions: VoiceSessionManager;
   private readonly threadObserver: ThreadObserver | undefined;
-  private completionObserver: CompletionObserver | undefined;
-  private readonly completionDeliveries = new Map<
-    string,
-    { fingerprint: string; outcome: Promise<DeliveryOutcome> }
-  >();
   private conversationRevision = 0;
   private readonly conversationReader: ConversationReader;
   private tierSelection: ServiceTierSelection | null = null;
@@ -387,85 +368,6 @@ export class VoiceRuntime {
         threadId: this.threadId,
         workspace: this.config.orchestrator.workspace,
       });
-      if (this.options.onCompletion) {
-        const publish = this.options.onCompletion;
-        const observer = new CompletionObserver(
-          this.threadId,
-          workspace,
-          (method, params, timeout) => this.requireConnection().request(method, params, timeout),
-          publish,
-          Object.values(this.options.controlMcp?.env ?? {}),
-        );
-        this.completionObserver = observer;
-        this.options.onCompletionReady?.({
-          snapshot: () => {
-            this.assertRunning();
-            return observer.snapshot();
-          },
-          deliver: (input) => {
-            const checked = completionRequestSchema.safeParse(input);
-            if (!checked.success) return Promise.resolve({ status: "unavailable" });
-            const fingerprint = createHash("sha256")
-              .update(JSON.stringify(checked.data))
-              .digest("hex");
-            const prior = this.completionDeliveries.get(checked.data.eventId);
-            if (prior)
-              return prior.fingerprint === fingerprint
-                ? prior.outcome
-                : Promise.resolve({ status: "unavailable" });
-            if (this.completionDeliveries.size >= MAX_COMPLETION_DELIVERIES)
-              return Promise.resolve({ status: "unavailable" });
-            const outcome = Promise.resolve().then(async (): Promise<DeliveryOutcome> => {
-              if (
-                this.shuttingDown ||
-                !this.attachment?.alive ||
-                checked.data.rootThreadId !== this.threadId
-              )
-                return { status: "unavailable" };
-              const delivery = completionDelivery(checked.data, observer.snapshot());
-              try {
-                const result = await this.attachment.request<{
-                  turn?: { id?: string; status?: string };
-                }>(
-                  "turn/start",
-                  {
-                    threadId: this.threadId,
-                    input: [],
-                    turnTrigger: "subagentCompletion",
-                    toolOutput: {
-                      name: COMPLETION_OUTPUT,
-                      namespace: COMPLETION_NAMESPACE,
-                      output: JSON.stringify(delivery),
-                    },
-                  },
-                  10000,
-                );
-                const turnId = result?.turn?.id;
-                if (
-                  typeof turnId !== "string" ||
-                  !turnId ||
-                  turnId.length > 128 ||
-                  result.turn?.status !== "inProgress"
-                )
-                  return { status: "unknown" };
-                return { status: "accepted", turnId };
-              } catch (error) {
-                return {
-                  status:
-                    error instanceof AppServerError &&
-                    typeof error.code === "number" &&
-                    !error.timedOut
-                      ? "refused"
-                      : "unknown",
-                };
-              }
-            });
-            this.completionDeliveries.set(checked.data.eventId, { fingerprint, outcome });
-            return outcome;
-          },
-        });
-        void observer.start();
-      }
       await this.confirmControlReady();
       this.threadReady = true;
       void this.threadObserver?.start();
@@ -544,7 +446,6 @@ export class VoiceRuntime {
     this.agentGateway?.close();
     this.shuttingDown = true;
     this.threadObserver?.stop();
-    this.completionObserver?.stop();
     this.threadReady = false;
     this.shutdownPromise = (async () => {
       try {
@@ -693,7 +594,6 @@ export class VoiceRuntime {
 
   private handleNotification(method: string, params: Record<string, unknown>): void {
     if (this.shuttingDown) return;
-    this.completionObserver?.notification(method, params);
     if (Object.hasOwn(nativeConversationSchemas, method)) {
       const revision = ++this.conversationRevision;
       if (this.options.onConversation) {

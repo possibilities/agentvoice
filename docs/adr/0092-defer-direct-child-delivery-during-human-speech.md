@@ -1,5 +1,9 @@
 # 0092: Defer direct-child delivery during human speech
 
+Superseded 2026-09-20 by
+[0103](0103-retire-synthetic-subagent-lifecycle-steering.md), which retires the
+underlying synthetic delivery path.
+
 Accepted 2026-09-16. This amends [0080](0080-direct-child-completion-delivery.md)'s
 immediate-delivery rule at the voice admission boundary.
 

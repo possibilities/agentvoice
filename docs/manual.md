@@ -145,7 +145,7 @@ the first accepted frontend creates it lazily. Closing
 the terminal frontend, closing or navigating away from the phone page, or
 terminating its owning process releases holds and closes client media. After the
 native realtime stop is acknowledged, the server retains the controller, runtime,
-Codex child, native work, gateway, direct-child observer and endpoints without realtime speech.
+Codex child, native work, gateway and endpoints without realtime speech.
 A stop refusal or timeout reports an unknown outcome and blocks another frontend
 until server restart while retaining native work. There are no
 pointer-frontend keybindings, including quit; process signals still perform cleanup.
@@ -242,19 +242,15 @@ Event clients must match the event protocol. A new server workspace session crea
 new event and control endpoints. Frontend detach preserves them; rediscover after
 server restart.
 
-### Direct child completions
+### Native child results
 
-Each newly observed terminal turn from a verified direct native child immediately
-sends one standalone tool output to the root through `turn/start`. The payload
-contains that completion's bounded identity/status metadata and a fresh bounded
-snapshot of children still in flight; native Codex supplies the full worker text
-separately. A busy root turn is steered through the same native request.
-
-There is no mailbox to open, no completion queue or replay API, and no retained
-consumable entry. The controller remembers only exact child/turn identities so a
-completion already seen is not submitted again across frontend detach or runtime
-replacement. It does not retry refused, unavailable, or ambiguous submissions.
-See [direct child completions](direct-child-completions.md) for scope and bounds.
+Codex sends each terminal child's authoritative response to its exact native parent
+through its own inter-agent queue. AgentVoice observes child lifecycle and history
+for status, transcripts and AgentHUD export, but never converts those observations
+into `turn/start`, steering, a wake-up, or a synthesized result. A queued result can
+join an active native wait or the parent's next turn. See
+[ADR 0103](adr/0103-retire-synthetic-subagent-lifecycle-steering.md) and the
+[manager input audit](manager-input-audit.md).
 
 ### Watch Voice and Agent in a browser
 
@@ -497,7 +493,7 @@ For an immediate new session in a retained workspace session, use the `agentvoic
 tool or `agentvoice.new_session` control API. It preflights a replacement, stops
 the old runtime and work, removes the marker, then creates and saves a new thread
 and reconnects voice when a frontend is attached. The workspace, controller and mute preferences remain;
-the old thread's direct-child observation state clears and transcripts stay separate. See [control API](api.md).
+transcripts stay separate. See [control API](api.md).
 
 `--resume`, `--continue`, `--fresh` and `--no-continue` are retired and report
 marker guidance. Existing launch scripts using those flags must remove them.
@@ -941,9 +937,8 @@ the named voice controls, and `orchestrator.extra.config` replaces
 
 ## Native work, no custom worker layer
 
-Codex owns the voice-to-working-agent handoff, tools, subagents and their native
-events. AgentVoice submits one bounded metadata output for each newly observed
-direct-child completion; native Codex still starts the children and delivers their full results.
+Codex owns the voice-to-working-agent handoff, tools, subagents, native events and
+authoritative child-result return. AgentVoice keeps lifecycle observation read-only.
 AgentVoice does not add worker execution tools or archive/delete completed work. An explicit MCP/API restart
 handoff is submitted once through native `turn/start` after exact resume and live media.
 It generates no worker-specific instructions; optional operator prompt overrides

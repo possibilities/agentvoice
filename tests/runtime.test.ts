@@ -160,17 +160,45 @@ describe("foreground runtime ownership", () => {
     expect(h.native.closes).toBe(1);
     await h.cleanup();
   });
-  test("native completions never trigger report turns; shutdown interrupts active native work", async () => {
-    const h = runtimeHarness();
+  test("verified child lifecycle stays observation-only while native manager output remains visible", async () => {
+    const observed: Array<{ event: string; data: Record<string, unknown> }> = [];
+    const h = runtimeHarness(
+      {},
+      { onConversation: (event) => observed.push({ event: event.event, data: event.data }) },
+    );
     try {
       await h.runtime.start();
       const parent = h.runtime.currentReady!.threadId;
       h.native.options.onNotification("turn/started", {
         threadId: parent,
-        turn: { id: "parent-turn" },
+        turn: { id: "parent-turn", status: "inProgress" },
       });
 
-      const fresh = h.runtime.currentReady!.threadId;
+      h.native.options.onNotification("thread/started", {
+        thread: {
+          id: "native-child",
+          parentThreadId: parent,
+          cwd: h.directory,
+          name: "native child",
+          status: { type: "idle" },
+        },
+      });
+      h.native.options.onNotification("item/started", {
+        threadId: parent,
+        turnId: "parent-turn",
+        startedAtMs: 1,
+        item: {
+          id: "spawn",
+          type: "subAgentActivity",
+          kind: "started",
+          agentThreadId: "native-child",
+          agentPath: "/root/native_child",
+        },
+      });
+      h.native.options.onNotification("turn/started", {
+        threadId: "native-child",
+        turn: { id: "turn-1", status: "inProgress" },
+      });
       h.native.options.onNotification("turn/completed", {
         threadId: "native-child",
         turn: {
@@ -179,11 +207,55 @@ describe("foreground runtime ownership", () => {
           items: [{ type: "agentMessage", text: "done" }],
         },
       });
+      h.native.options.onNotification("item/completed", {
+        threadId: parent,
+        turnId: "parent-turn",
+        completedAtMs: 2,
+        item: {
+          id: "completed",
+          type: "subAgentActivity",
+          kind: "completed",
+          agentThreadId: "native-child",
+          agentPath: "/root/native_child",
+        },
+      });
+      h.native.options.onNotification("item/completed", {
+        threadId: parent,
+        turnId: "next-parent-turn",
+        completedAtMs: 3,
+        item: { id: "manager-result", type: "agentMessage", text: "Native result received" },
+      });
+      await Bun.sleep(0);
       expect(
         h.native.calls.some((c) =>
           ["turn/start", "turn/steer", "thread/archive", "thread/delete"].includes(c.method),
         ),
       ).toBe(false);
+      expect(observed).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: "conversation.item.started",
+            data: expect.objectContaining({
+              item: expect.objectContaining({ type: "subAgentActivity", kind: "started" }),
+            }),
+          }),
+          expect.objectContaining({
+            event: "conversation.item.completed",
+            data: expect.objectContaining({
+              item: expect.objectContaining({ type: "subAgentActivity", kind: "completed" }),
+            }),
+          }),
+          expect.objectContaining({
+            event: "conversation.item.completed",
+            data: expect.objectContaining({
+              item: expect.objectContaining({
+                type: "agentMessage",
+                text: "Native result received",
+              }),
+            }),
+          }),
+        ]),
+      );
       expect(h.native.threads).toHaveLength(1);
       for (const call of h.native.calls.filter((c) => c.method === "thread/start")) {
         expect(call.params).not.toHaveProperty("dynamicTools");
@@ -191,16 +263,12 @@ describe("foreground runtime ownership", () => {
         expect(call.params).not.toHaveProperty("developerInstructions");
       }
       expect(h.native.options).not.toHaveProperty("onRequest");
-      h.native.options.onNotification("turn/started", {
-        threadId: fresh,
-        turn: { id: "fresh-turn" },
-      });
       await h.runtime.shutdown();
       const interrupted = h.native.calls
         .filter((c) => c.method === "turn/interrupt")
         .map((c) => c.params["threadId"]);
       expect(interrupted).toContain(parent);
-      expect(interrupted).toContain(fresh);
+      expect(interrupted).not.toContain("native-child");
     } finally {
       await h.cleanup();
     }

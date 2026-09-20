@@ -1,5 +1,9 @@
 # 0080: Deliver each direct-child completion immediately
 
+Superseded 2026-09-20 by
+[0103](0103-retire-synthetic-subagent-lifecycle-steering.md), which removes the
+lifecycle-derived `turn/start` bridge and leaves native Codex result return intact.
+
 Accepted 2026-09-15 at the operator's request. This supersedes
 [0038](0038-thread-mailbox-wakeups.md) and the mailbox lifecycle, opening, and
 guidance decisions in [0059](0059-clarify-mailbox-and-conversation-hold-guidance.md).

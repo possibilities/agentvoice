@@ -264,7 +264,7 @@ arbitrary-thread restart scopes do not exist in version 6.
 `agentvoice.new_session` uses the same durable operation and instance/generation
 fences, with scope `runtime` in its result. After successful preflight and old
 runtime cleanup it removes the unchanged workspace `.agentvoice-session` marker,
-clears direct-child observation state, creates and saves a new thread and reconnects voice when
+creates and saves a new thread and reconnects voice when
 a frontend is attached. `ready` confirms the new thread and runtime readiness;
 it confirms media readiness only when attached. Preflight/cleanup failure
 preserves the marker; failure after removal leaves either no marker or the

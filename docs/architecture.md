@@ -182,7 +182,7 @@ owns the current source map and recording/attachment implementation guidance.
   validates exact native main-thread ownership; no latest-history lookup or fallback.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
 - src/runtime-control/controller.ts: one server-owned workspace session, exact thread leases,
-  workspace lease before startup, explicit new-session replacement and child-turn dedupe reset,
+  workspace lease before startup and explicit new-session replacement,
   native identity, readiness, MCP/API redial and full runtime replacement. Preserve
   controller ownership across frontend detach; cancel pointer holds on detach and
   after successful replacement preflight. Redial and immediate voice application
@@ -212,8 +212,8 @@ owns the current source map and recording/attachment implementation guidance.
   into native history or automatic replay; exported observer files are not a
   continuity source. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
-  No audio/bearer capabilities or mutation/MCP methods. Direct-child completion
-  delivery is not an event snapshot/replay or control API. Replacement resets
+  No audio/bearer capabilities or mutation/MCP methods. Child lifecycle remains
+  read-only and never creates manager input. Replacement resets
   native inventory; stale incarnations never publish into a successor or another server session. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
   including one latest turn without item bodies for native timing. Never hydrate
@@ -234,22 +234,13 @@ owns the current source map and recording/attachment implementation guidance.
   authenticated server and its statically registered enabled catalog. Never gate
   voice startup on `mcpServerStatus/list`: native Codex rebuilds the global MCP
   inventory for that request and waits for unrelated servers.
-- src/completions/: the bounded completion-delivery contract and verified
-  direct-child lifecycle observer. Each newly observed terminal child turn submits
-  one standalone native tool output through `turn/start`, carrying that completion's
-  identity/status metadata and a fresh in-flight snapshot. The controller retains
-  only exact child/turn dedupe identities across frontend detach and runtime
-  replacement; `new_session` and server shutdown clear them. There is no completion
-  queue, opening API, cached opening, replay, or result store. Stale generations
-  cannot publish. Native owns full child results. See
-  [ADR 0080](adr/0080-direct-child-completion-delivery.md) and
-  [direct child completions](direct-child-completions.md).
 - src/core/runtime.ts: launch, exact restart resume, attach/detach of realtime voice,
   owned child lifecycle and runtime-cached settings. Frontend detach stops only
   realtime voice; native work and attachment gateway remain. No account selection/rotation, custom
-  worker manager. Custom native turn submissions are limited to
-  explicit controller-owned restart handoffs ([ADR 0016](adr/0016-restart-handoff.md)) and immediate direct-child
-  completion outputs ([ADR 0080](adr/0080-direct-child-completion-delivery.md)).
+  worker manager. Custom native turn submissions are limited to explicit
+  controller-owned restart handoffs ([ADR 0016](adr/0016-restart-handoff.md)). Native
+  Codex owns direct-child result return; AgentVoice lifecycle observation never
+  submits or steers a turn ([ADR 0103](adr/0103-retire-synthetic-subagent-lifecycle-steering.md)).
 - src/core/session.ts: counted native voice starts/stops and attribution.
   Stop timeouts do not prove non-delivery: retain each expected requested-close
   until notification or reset; a late refusal must remove only its own stop.

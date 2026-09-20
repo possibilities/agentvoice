@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { InFlight } from "../completions/contract.ts";
 import type { ThreadInventory, ThreadView } from "../events/contract.ts";
 
 export const codingActivitySchema = z.enum(["working", "blocked", "idle", "unknown"]);
@@ -12,8 +11,8 @@ export class CodingActivityReducer {
   private turn: ThreadView["turn"] = null;
   private readonly seen = new Map<string, "inProgress" | "terminal">();
   private overflow = false;
-  private children: InFlight | undefined;
-  private childrenRevision = -1;
+  private children: ThreadView[] | undefined;
+  private inventoryComplete = false;
 
   reset(rootId = ""): void {
     this.rootId = rootId;
@@ -22,10 +21,14 @@ export class CodingActivityReducer {
     this.seen.clear();
     this.overflow = false;
     this.children = undefined;
-    this.childrenRevision = -1;
+    this.inventoryComplete = false;
   }
 
   threads(inventory: ThreadInventory): void {
+    this.inventoryComplete = inventory.complete;
+    this.children = inventory.threads
+      .filter((thread) => thread.parentThreadId === this.rootId)
+      .map((thread) => structuredClone(thread));
     const root = inventory.threads.find((thread) => thread.id === this.rootId);
     if (!root || root.status === "notLoaded" || root.status === "systemError") {
       // A late snapshot of the interrupted turn must not resurrect an unloaded root.
@@ -56,18 +59,8 @@ export class CodingActivityReducer {
     }
   }
 
-  inFlight(inventory: InFlight): void {
-    if (inventory.revision <= this.childrenRevision) return;
-    this.childrenRevision = inventory.revision;
-    this.children = structuredClone(inventory);
-  }
-
   rootGap(): void {
     this.root = undefined;
-  }
-
-  childrenGap(): void {
-    this.children = undefined;
   }
 
   state(): CodingActivity {
@@ -77,10 +70,12 @@ export class CodingActivityReducer {
         root = this.root.activeFlags.length ? "blocked" : "working";
       else if (this.turn || this.root.status === "idle") root = "idle";
     }
-    const children = this.children;
-    if (root === "working" || children?.threads.some((child) => !child.waitingOn.length))
+    const activeChildren = this.children?.filter(
+      (child) => child.turn?.status === "inProgress" || (!child.turn && child.status === "active"),
+    );
+    if (root === "working" || activeChildren?.some((child) => !child.activeFlags.length))
       return "working";
-    if (root === "unknown" || !children?.complete) return "unknown";
-    return root === "blocked" || children.threads.length ? "blocked" : "idle";
+    if (root === "unknown" || !this.inventoryComplete || !activeChildren) return "unknown";
+    return root === "blocked" || activeChildren.length ? "blocked" : "idle";
   }
 }

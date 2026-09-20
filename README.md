@@ -76,7 +76,7 @@ configuration, permissions, web interaction, and troubleshooting.
 - [Configuration schema](server.schema.json) and [field guide](docs/field-guide.md)
 - [Client API](docs/client-api.md), [control API](docs/api.md), and
   [event protocol](docs/events.md)
-- [Direct child completion delivery](docs/direct-child-completions.md)
+- [Manager input and injection audit](docs/manager-input-audit.md)
 - [Android client](android/README.md) and
   [private-network handoff](docs/android-client-handoff.md)
 - [Vocabulary](CONTEXT.md) and [decision log](docs/adr/README.md)

@@ -178,7 +178,7 @@ test("ticket is minimal and requires an authenticated watcher before one client"
   connected.watch.close();
 });
 
-test("gateway forwards correlated root input, redacts native credentials and rejects read RPC", async () => {
+test("gateway still forwards human typed root input without synthetic lifecycle fields", async () => {
   const f = fixture();
   const connected = await client(f.gateway.issue(identity));
   connected.socket.send(
@@ -191,6 +191,14 @@ test("gateway forwards correlated root input, redacts native credentials and rej
   await until(() => connected.frames.some((frame) => frame["id"] === "turn"));
   const turn = connected.frames.find((frame) => frame["id"] === "turn")!;
   expect(turn).toMatchObject({ result: { turn: { id: "native-turn" } } });
+  expect(f.calls.find((frame) => frame["method"] === "turn/start")).toMatchObject({
+    params: {
+      threadId: identity.threadId,
+      input: [{ type: "text", text: "work" }],
+    },
+  });
+  expect(JSON.stringify(f.calls)).not.toContain("subagentCompletion");
+  expect(JSON.stringify(f.calls)).not.toContain("subagent_completion");
   expect(JSON.stringify(turn)).not.toContain("native-private");
   expect(JSON.stringify(turn)).toContain("[redacted]");
 
@@ -229,7 +237,7 @@ test("revocation closes both peers and invalidates the token", async () => {
   ).toBe(401);
 });
 
-test("speech CLI parses selection and uses the guarded connection once", async () => {
+test("explicit human speech still reaches the active native realtime session once", async () => {
   expect(parseSpeechArgs(["Hello café 👋"]).text).toBe("Hello café 👋");
   expect(parseSpeechArgs(["--thread", "owned-thread", "--", "--hello"]).text).toBe("--hello");
   expect(() => parseSpeechArgs([])).toThrow("nonempty");
@@ -242,6 +250,10 @@ test("speech CLI parses selection and uses the guarded connection once", async (
     "initialized",
     "thread/realtime/appendSpeech",
   ]);
+  expect(f.calls.at(-1)?.["params"]).toEqual({
+    threadId: identity.threadId,
+    text: "Hello café 👋",
+  });
 });
 
 test("speech rejection is surfaced without retry and native executable resolution remains shared", async () => {

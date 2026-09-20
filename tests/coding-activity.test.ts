@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { InFlight } from "../src/completions/contract.ts";
 import type { ThreadView } from "../src/events/contract.ts";
 import { connectFrontend } from "../src/frontend/client.ts";
 import { frontendSocketPath } from "../src/frontend/protocol.ts";
@@ -23,27 +22,20 @@ const root = (change: Partial<ThreadView> = {}): ThreadView => ({
 });
 const turn = (id: string, status: NonNullable<ThreadView["turn"]>["status"]): ThreadView =>
   root({ status: "active", turn: { id, status } });
-const children = (revision = 1, waiting = false, complete = true): InFlight => ({
-  revision,
-  complete,
-  observedAt: "2026-09-10T00:00:00.000Z",
-  threads: [
-    {
-      threadId: "child",
-      turnId: "child-turn",
-      name: null,
-      agentPath: null,
-      waitingOn: waiting ? ["waitingOnApproval"] : [],
-    },
-  ],
+const child = (waiting = false): ThreadView => ({
+  id: "child",
+  parentThreadId: "root",
+  name: null,
+  status: "active",
+  activeFlags: waiting ? ["waitingOnApproval"] : [],
+  turn: { id: "child-turn", status: "inProgress" },
 });
 function setup() {
   const activity = new CodingActivityReducer();
   activity.reset("root");
-  const update = (view: ThreadView = root()) =>
-    activity.threads({ complete: true, threads: [view] });
+  const update = (view: ThreadView = root(), children: ThreadView[] = [], complete = true) =>
+    activity.threads({ complete, threads: [view, ...children] });
   update();
-  activity.inFlight({ ...children(), threads: [] });
   return { activity, update };
 }
 
@@ -52,23 +44,19 @@ test("coding activity distinguishes observed work, human waits, idle and incompl
   expect(activity.state()).toBe("idle");
   update(root({ status: "active", activeFlags: ["waitingOnUserInput"] }));
   expect(activity.state()).toBe("blocked");
-  activity.inFlight(children(2, false, false));
+  update(root(), [child()], false);
   expect(activity.state()).toBe("working");
-  activity.inFlight(children(3, true, false));
+  update(root(), [child(true)], false);
   expect(activity.state()).toBe("unknown");
-  activity.inFlight(children(4, true));
+  update(root(), [child(true)]);
   expect(activity.state()).toBe("blocked");
-  update(turn("local-read", "inProgress"));
+  update(turn("local-read", "inProgress"), [child(true)]);
   expect(activity.state()).toBe("working");
   update(turn("local-read", "completed"));
-  expect(activity.state()).toBe("blocked");
-  activity.inFlight({ ...children(5), threads: [] });
   expect(activity.state()).toBe("idle");
-  activity.childrenGap();
+  update(root(), [], false);
   expect(activity.state()).toBe("unknown");
-  activity.inFlight(children(4));
-  expect(activity.state()).toBe("unknown");
-  activity.inFlight({ ...children(6), threads: [] });
+  update();
   expect(activity.state()).toBe("idle");
 });
 
@@ -110,16 +98,23 @@ test("coding activity excludes unrelated inventory and clears unload, gaps and r
   update(turn("successor", "inProgress"));
   update({ ...turn("successor", "inProgress"), status: "systemError" });
   expect(activity.state()).toBe("unknown");
-  activity.inFlight(children(2));
+  update(root(), [child()]);
   expect(activity.state()).toBe("working");
   activity.reset("root");
   expect(activity.state()).toBe("unknown");
   update(root());
-  expect(activity.state()).toBe("unknown");
-  activity.inFlight({ ...children(1), threads: [] });
   expect(activity.state()).toBe("idle");
   activity.rootGap();
   expect(activity.state()).toBe("unknown");
+});
+
+test("terminal direct-child turns override trailing coarse active state", () => {
+  const { activity, update } = setup();
+  const completed = { ...child(), turn: { id: "child-turn", status: "completed" as const } };
+  update(root(), [completed]);
+  expect(activity.state()).toBe("idle");
+  update(root(), [{ ...completed, turn: { id: "next", status: "inProgress" } }]);
+  expect(activity.state()).toBe("working");
 });
 
 test("coding activity bounds root turn tombstones without evicting and resurrecting old work", () => {
@@ -199,9 +194,8 @@ test("coding activity survives frontend reconnect and voice-only changes, then r
     await until(() => controller.status().runtime.phase === "ready");
     const emit = callbacks[0]!;
     emit("threads", { complete: true, threads: [root()] });
-    emit("completion", { kind: "inventory", inventory: { ...children(), threads: [] } });
     await until(() => client!.state().codingActivity === "idle");
-    emit("completion", { kind: "inventory", inventory: children(2) });
+    emit("threads", { complete: true, threads: [root(), child()] });
     await until(() => client!.state().codingActivity === "working");
     const retained = controller;
     const retainedIdentity = {
@@ -221,13 +215,11 @@ test("coding activity survives frontend reconnect and voice-only changes, then r
       threadId: controller.status().threadId,
     }).toEqual(retainedIdentity);
     expect(frontendAttachments).toEqual([true, false, true]);
-    emit("completion", { kind: "inventory", inventory: children(3, true) });
+    emit("threads", { complete: true, threads: [root(), child(true)] });
     await until(() => client!.state().codingActivity === "blocked");
-    emit("completion", { kind: "gap", reason: "inventory" });
+    emit("threads", { complete: false, threads: [root(), child(true)] });
     await until(() => client!.state().codingActivity === "unknown");
-    emit("completion", { kind: "inventory", inventory: children(2) });
-    expect(controller.state().codingActivity).toBe("unknown");
-    emit("completion", { kind: "inventory", inventory: { ...children(4), threads: [] } });
+    emit("threads", { complete: true, threads: [root()] });
     await until(() => client!.state().codingActivity === "idle");
     emit("threads", { complete: true, threads: [turn("read", "inProgress")] });
     await until(() => client!.state().codingActivity === "working");
@@ -248,7 +240,6 @@ test("coding activity survives frontend reconnect and voice-only changes, then r
     );
     await until(() => client!.state().codingActivity === "unknown");
     emit("threads", { complete: true, threads: [turn("stale", "inProgress")] });
-    emit("completion", { kind: "inventory", inventory: children(100) });
     expect(controller.state().codingActivity).toBe("unknown");
     callbacks[1]!("threads", { complete: true, threads: [turn("fresh", "inProgress")] });
     await until(() => client!.state().codingActivity === "working");

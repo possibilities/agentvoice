@@ -59,7 +59,7 @@ Every server workspace session resumes the exact main thread named by `.agentvoi
 workspace. Missing markers create and save a new thread; invalid/unresumable
 markers fail without fallback. Client/server restarts preserve the marker.
 Use `agentvoice_new_session` when the human requests a new session: it preflights,
-stops old work, removes the marker and clears direct-child observation state, creates and saves
+stops old work, removes the marker, creates and saves
 a new thread, and reconnects voice when a frontend is attached. Old native history and
 transcripts remain. Read status to recover the journaled result; reuse the same
 operation ID only for the same request. No handoff prompt or speech replay is added.
