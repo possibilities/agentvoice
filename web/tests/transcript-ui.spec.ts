@@ -35,7 +35,11 @@ test("windowing keeps a bounded DOM for a 2,000-message transcript", async ({ pa
   expect(await page.locator("[data-windowed-row-key]").count()).toBeLessThan(40);
 });
 
-test("settled activity events retain the measured row and following message", async ({ page }) => {
+test("settled activity disclosures remain separate measured rows", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 1600 });
+  await page.locator("main").evaluate((element) => {
+    element.style.height = "1500px";
+  });
   await page.evaluate(() => {
     const host = (
       window as unknown as Window & {
@@ -63,26 +67,20 @@ test("settled activity events retain the measured row and following message", as
       { id: "after", role: "assistant", content: "After activity", status: "complete" },
     ]);
   });
-  const group = page.locator(".activity-group__trigger");
-  await group.click();
-  await expect(group).toHaveAttribute("aria-expanded", "true");
-  const items = page.locator(".activity-group__items");
-  await expect(items.locator(":scope > *")).toHaveCount(5);
-  for (const type of ["transitionend", "animationend"]) {
-    await items.evaluate((element, eventType) => {
-      element.dispatchEvent(new Event(eventType, { bubbles: true }));
-    }, type);
-    await expect
-      .poll(() =>
-        group.evaluate((element) => {
-          const row = element.closest("[data-windowed-row-key]")!;
-          const last = row.querySelector(".activity-group__items")!.lastElementChild!;
-          return (
-            row.nextElementSibling!.getBoundingClientRect().top -
-            last.getBoundingClientRect().bottom
-          );
+  const triggers = page.locator(".tool-disclosure__trigger");
+  await expect(triggers).toHaveCount(5);
+  for (const trigger of await triggers.all()) await trigger.click();
+  await expect(page.getByLabel(/Output/, { exact: true })).toHaveCount(5);
+  await expect(page.locator(".activity-group")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.locator("[data-windowed-row-key]").evaluateAll((rows) =>
+        rows.slice(0, -1).every((row, index) => {
+          const current = row.getBoundingClientRect();
+          const next = rows[index + 1]!.getBoundingClientRect();
+          return current.bottom <= next.top + 1;
         }),
-      )
-      .toBeGreaterThanOrEqual(0);
-  }
+      ),
+    )
+    .toBe(true);
 });

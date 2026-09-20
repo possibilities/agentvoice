@@ -23,7 +23,9 @@ export function MessageBody({ message }: { message: Message }) {
   const isVoiceHandoff = message.role === "user" && presentation.title === "Via Voice";
   return (
     <div className="transcript-presentation">
-      <p className="transcript-presentation__title">{presentation.title}</p>
+      {isVoiceHandoff ? null : (
+        <p className="transcript-presentation__title">{presentation.title}</p>
+      )}
       <div className="markdown-content transcript-presentation__body">{presentation.body}</div>
       {isVoiceHandoff ? null : (
         <>

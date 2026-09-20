@@ -1,5 +1,5 @@
 export type { TranscriptEntry as TranscriptBlock } from "../lib/transcript";
-export { activitySummary, groupTranscript } from "../lib/transcript";
+export { groupTranscript } from "../lib/transcript";
 export type {
   FileChange,
   Message as TranscriptMessage,

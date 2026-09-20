@@ -105,7 +105,7 @@ test("rolls refreshes into one stable block until authored conversation resumes"
   const blocks = groupTranscript([first, tool, second, human, third]);
   expect(blocks.map((block) => [block.kind, block.id])).toEqual([
     ["routing-context", first.id],
-    ["activity", tool.id],
+    ["message", tool.id],
     ["message", human.id],
     ["routing-context", third.id],
   ]);

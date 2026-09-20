@@ -63,7 +63,7 @@ test.each([
   expect(merged.messages).toEqual([completed]);
 });
 
-test("distinct child turns keep distinct rows; cards separate surrounding tool activity", () => {
+test("lifecycle rows disappear while ordinary collaboration activity stays ordered", () => {
   const start = agentMessage({ turnId: "parent-turn", item })!;
   const end = agentMessage({
     turnId: "parent-turn",
@@ -80,9 +80,9 @@ test("distinct child turns keep distinct rows; cards separate surrounding tool a
   expect(interaction.role).toBe("tool");
   expect(
     groupTranscript([interaction, start, end, nextEnd, { ...interaction, id: "send-2" }]).map(
-      (b) => b.kind,
+      (block) => block.id,
     ),
-  ).toEqual(["activity", "message", "message", "message", "activity"]);
+  ).toEqual([interaction.id, "send-2"]);
   expect(new Set([start.id, end.id, nextEnd.id]).size).toBe(3);
 });
 

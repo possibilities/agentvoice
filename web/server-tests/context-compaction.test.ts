@@ -52,7 +52,7 @@ test("the retained Codex adapter uses the same system presentation", () => {
   expect(message).toMatchObject({ role: "system", nativeItemType: "contextCompaction" });
 });
 
-test("cards separate adjacent tool groups and unknown native items retain their fallback", () => {
+test("compaction keeps its exact order between organic tool disclosures", () => {
   const card = agentMessage({
     turnId: "turn",
     item: { type: "contextCompaction", id: "compact" },
@@ -65,6 +65,6 @@ test("cards separate adjacent tool groups and unknown native items retain their 
   expect(unknown.nativeItemType).toBeUndefined();
   expect(unknown.toolActivity?.name).toBe("futureNativeEvent");
   const blocks = groupTranscript([unknown, card, { ...unknown, id: "next" }]);
-  expect(blocks.map((block) => block.kind)).toEqual(["activity", "message", "activity"]);
+  expect(blocks.map((block) => block.kind)).toEqual(["message", "message", "message"]);
   expect(blocks[1]?.id).toBe(card.id);
 });

@@ -23,27 +23,19 @@ accepted scoped CSS byte output and existing recovered AgentVoice drafts; neithe
 identifier loads or communicates with AgentChats.
 
 The transcript has one full detail surface: callers cannot hide native activity,
-and source adapters do not carry a messages-only query or filter. System event
-cards consume the exact optional `Message.nativeItemType` copied from the source
-item on a `system` message. Native adapters supply readable fallback content; the
-static registry in `components/chat/system-event-card.tsx` owns custom rendering.
-Add a renderer there when an observed native item earns a custom card. Unknown
-card types retain the existing activity renderer. Explicit system events stay as
-independent measured rows, so they cannot disappear inside a tool group. Both
-Agent and Voice use this same boundary; it does not manufacture events for either source. See
-[ADR 0085](../../../docs/adr/0085-system-event-transcript-cards.md).
-Subagent start, turn completion, and interruption observations use the same card
-registry with exact agent paths and disclosed native identities; communication
-activity retains its tool treatment. No model, effort, Work, or result is inferred
-from these identity-only observations. See
-[ADR 0088](../../../docs/adr/0088-subagent-lifecycle-transcript-cards.md).
+and source adapters do not carry a messages-only query or filter. Its top-level
+types are Human, Agent, and generic Tool call. All machine events use that one
+Marker/activity-disclosure shell, with Attachment primitives permitted only as
+specialized inner details. No separate event card registry, special compaction UI,
+or consecutive-activity shell exists. Native file operations retain
+their order, status, paths, counts, lazy Pierre diffs, original projected evidence,
+and honest unavailable/truncated fallbacks without reading workspace files.
 
-Native file-change items remain independent rows between adjacent activity
-groups. One card preserves the native operation's file order and status, shows
-paths and line counts immediately, and lazy-loads Pierre for each disclosed diff.
-Original projected detail and honest unavailable/truncated fallbacks remain
-reachable without reading workspace files. See
-[ADR 0089](../../../docs/adr/0089-top-level-file-change-diffs.md).
+Subagent lifecycle projections receive no web presentation; direct worker results
+keep their normal conversation delivery. Voice-originated Human messages retain
+their internal provenance and complete details behind the microphone button beside
+the author without rendering a second source label. See
+[ADR 0105](../../../docs/adr/0105-compose-transcript-events-from-primitives.md).
 
 The copied component boundary retains scoped lint exceptions for existing
 interaction roles, effect dependencies, and positional rendering keys; migration

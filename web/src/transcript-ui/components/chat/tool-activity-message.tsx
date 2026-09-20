@@ -1,11 +1,18 @@
 import { ChevronRightIcon, CircleAlertIcon, TerminalSquareIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { useDisclosureState } from "@/transcript/disclosure-state";
 import type { Message } from "@/types/message";
 
-export function ToolActivityMessage({ message }: { message: Message }) {
+export function ToolActivityMessage({
+  message,
+  children,
+}: {
+  message: Message;
+  children?: ReactNode;
+}) {
   const [open, setOpen] = useDisclosureState(`tool:${message.id}`);
   const activity = message.toolActivity;
   const isError = message.status === "error";
@@ -20,11 +27,17 @@ export function ToolActivityMessage({ message }: { message: Message }) {
   if (!hasPayload && message.content.trim() && message.content !== summary) {
     sections.push({ label: "Content", content: message.content });
   }
-  const hasDetails = sections.length > 0;
+  const hasDetails = sections.length > 0 || Boolean(children);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <Marker variant="border" className="tool-disclosure" data-error={isError || undefined}>
+      <Marker
+        variant="border"
+        className="tool-disclosure"
+        data-transcript-type="tool-call"
+        data-state={activity?.state}
+        data-error={isError || undefined}
+      >
         <MarkerIcon>{isError ? <CircleAlertIcon /> : <TerminalSquareIcon />}</MarkerIcon>
         <MarkerContent>
           <CollapsibleTrigger
@@ -50,6 +63,7 @@ export function ToolActivityMessage({ message }: { message: Message }) {
                   </pre>
                 </section>
               ))}
+              {children}
             </CollapsibleContent>
           ) : null}
         </MarkerContent>

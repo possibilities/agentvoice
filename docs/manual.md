@@ -8,7 +8,7 @@ A local Codex voice server with terminal and same-device browser frontends.
 `agentvoice` prints command help. `agentvoice client` is the explicit pointer voice
 frontend. The AgentVoice web UI at `https://agentvoice.localhost` presents one
 persistent Agent transcript and accepts keyboard-submitted Agent input. Projected
-voice handoffs remain visible there as `Via Voice` Human messages. The terminal
+voice handoffs remain visible there as Human messages with a microphone details button. The terminal
 client owns native audio and WebRTC, and displays connection status and monochrome YOU/AGENT
 buttons, plus PUSH TO TALK when the microphone is muted. `agentvoice phone`
 instead opens a capability-bearing loopback page whose browser owns audio and

@@ -26,7 +26,7 @@ function routing(id: string, revision: number, remaining: number): TranscriptMes
   };
 }
 
-test("routing refreshes share one quiet card with newest balance and auditable updates", async ({
+test("routing refreshes share one activity disclosure with exact auditable updates", async ({
   page,
 }) => {
   await page.goto("/tests/transcript-ui.html");
@@ -53,14 +53,12 @@ test("routing refreshes share one quiet card with newest balance and auditable u
     },
   };
   await setMessages([first]);
-  const card = page.getByRole("note", { name: "Routing context", exact: true });
-  await expect(card).toContainText("gpt-5.6-sol · medium");
-  await expect(card).toContainText("Codex · codex-1");
-  await expect(card).toContainText("primary · 28% used");
-  await expect(card).toContainText("weekly · 14% used");
-  await expect(card).toContainText("resets in");
-  await expect(card.getByText("Codex · codex-1", { exact: true })).toHaveCount(1);
-  await card.evaluate((element) => element.setAttribute("data-retained", "yes"));
+  const activity = page.locator('.tool-disclosure[data-transcript-type="tool-call"]', {
+    hasText: "Routing context",
+  });
+  await expect(activity).toContainText("gpt-5.6-sol · medium");
+  await expect(activity).toContainText("1 update");
+  await activity.evaluate((element) => element.setAttribute("data-retained", "yes"));
 
   await setMessages([
     { ...first },
@@ -73,12 +71,17 @@ test("routing refreshes share one quiet card with newest balance and auditable u
     },
     routing("routing-2", 2, 68),
   ]);
-  await expect(card).toHaveCount(1);
-  await expect(card).toHaveAttribute("data-retained", "yes");
-  await expect(card).toContainText("primary · 32% used");
-  await expect(card.getByRole("button", { name: "2 updates", exact: true })).toBeVisible();
-  await card.getByRole("button", { name: "2 updates", exact: true }).click();
-  await expect(card.getByText("Routing update", { exact: true })).toHaveCount(2);
+  await expect(activity).toHaveCount(1);
+  await expect(activity).toHaveAttribute("data-retained", "yes");
+  await expect(activity).toContainText("2 updates");
+  await activity.getByRole("button").focus();
+  await activity.getByRole("button").press("Enter");
+  await expect(activity.getByLabel("Routing update 2", { exact: true })).toContainText(
+    '"usedPercent": 32',
+  );
+  await expect(activity.getByLabel("Routing update 1", { exact: true })).toContainText(
+    '"lane": "weekly"',
+  );
   await expect(page.locator(".message-author")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Command pwd", exact: true })).toBeVisible();
 
@@ -88,11 +91,12 @@ test("routing refreshes share one quiet card with newest balance and auditable u
     { id: "human", role: "user", content: "Continue", status: "complete" },
     routing("routing-3", 3, 64),
   ]);
-  await expect(page.getByRole("note", { name: "Routing context" })).toHaveCount(2);
-  await expect(page.getByRole("note", { name: "Routing context" }).nth(1)).toContainText(
-    "gpt-5.6-sol · medium",
-  );
-  await page.screenshot({ path: "test-results/routing-context-card.png", fullPage: true });
+  const routingActivities = page.locator('.tool-disclosure[data-transcript-type="tool-call"]', {
+    hasText: "Routing context",
+  });
+  await expect(routingActivities).toHaveCount(2);
+  await expect(routingActivities.nth(1)).toContainText("gpt-5.6-sol · medium");
+  await page.screenshot({ path: "test-results/routing-context-activity.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page
     .getByRole("region", { name: "Component transcript", exact: true })
@@ -100,7 +104,10 @@ test("routing refreshes share one quiet card with newest balance and auditable u
       element.scrollTop = 0;
     });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: "test-results/routing-context-card-narrow.png", fullPage: true });
+  await page.screenshot({
+    path: "test-results/routing-context-activity-narrow.png",
+    fullPage: true,
+  });
 });
 
 test("routing rollups survive history replacement and virtualization", async ({ page }) => {
@@ -140,15 +147,17 @@ test("routing rollups survive history replacement and virtualization", async ({ 
     await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeLessThan(2);
   };
   await scrollToStart();
-  const card = page.getByRole("note", { name: "Routing context", exact: true });
-  await expect(card).toBeVisible();
-  await card.getByRole("button", { name: "2 updates", exact: true }).click();
+  const activity = page.locator('.tool-disclosure[data-transcript-type="tool-call"]', {
+    hasText: "Routing context",
+  });
+  await expect(activity).toBeVisible();
+  await activity.getByRole("button").click();
   await viewport.focus();
   await viewport.press("End");
-  await expect(card).toHaveCount(0);
+  await expect(activity).toHaveCount(0);
   await scrollToStart();
-  await expect(card).toBeVisible();
+  await expect(activity).toBeVisible();
   await setMessages(messages.map((message) => ({ ...message })));
-  await expect(card).toBeVisible();
-  await expect(card.getByRole("button", { name: "Hide updates", exact: true })).toBeVisible();
+  await expect(activity).toBeVisible();
+  await expect(activity.getByRole("button")).toHaveAttribute("aria-expanded", "true");
 });

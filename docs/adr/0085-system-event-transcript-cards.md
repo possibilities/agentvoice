@@ -1,5 +1,7 @@
 # 0085: Render observed system events as transcript cards
 
+Status: Presentation superseded by [ADR 0105](0105-compose-transcript-events-from-primitives.md).
+
 Accepted 2026-09-15. Extends the owned Transcript UI in
 [0075](0075-own-web-transcript-ui.md) and preserves the measured rows and stable
 identities in [0057](0057-responsive-web-transcripts.md).

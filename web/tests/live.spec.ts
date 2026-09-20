@@ -25,9 +25,7 @@ const subagentMessage = (id: string, kind: string, agentPath: string): Transcrip
   };
 };
 
-test("windowed subagent groups keep every lifecycle body reachable after polling", async ({
-  page,
-}) => {
+test("windowed collaboration tools keep every detail reachable after polling", async ({ page }) => {
   const singleton = subagentMessage(
     "interaction",
     "interacted",
@@ -53,23 +51,19 @@ test("windowed subagent groups keep every lifecycle body reachable after polling
   await singletonTrigger.click();
   await expect(agent.getByLabel("Agent thread", { exact: true })).toHaveText("thread-interaction");
 
-  const group = agent.locator(".activity-group__trigger");
-  await expect(group).toContainText("2 subagent activities");
-  await group.click();
-  await expect(group).toHaveAttribute("aria-expanded", "true");
-  const children = agent.locator(".activity-group__items .tool-disclosure");
-  await expect(children).toHaveCount(2);
+  const tools = agent.locator(".tool-disclosure");
+  await expect(tools).toHaveCount(3);
 
-  for (const [index, action] of ["Started", "Completed"].entries()) {
-    const trigger = children.nth(index).locator(".tool-disclosure__trigger");
+  for (const action of ["Started", "Completed"]) {
+    const trigger = agent.locator(".tool-disclosure__trigger", { hasText: action });
     await trigger.scrollIntoViewIfNeeded();
     await expect(trigger).toBeInViewport();
-    if (index === 0) await trigger.click();
+    if (action === "Started") await trigger.click();
     else {
       await trigger.focus();
       await trigger.press("Enter");
     }
-    const body = children.nth(index).getByLabel("Activity", { exact: true });
+    const body = trigger.locator("..").getByLabel("Activity", { exact: true });
     await body.scrollIntoViewIfNeeded();
     await expect(body).toHaveText(action);
     await expect(body).toBeInViewport();
@@ -85,8 +79,7 @@ test("windowed subagent groups keep every lifecycle body reachable after polling
       subagentMessage("followup", "interacted", "/root/reviewer"),
     ],
   };
-  await expect(children).toHaveCount(3);
-  await expect(group).toHaveAttribute("aria-expanded", "true");
+  await expect(tools).toHaveCount(4);
   for (const action of ["Started", "Completed"])
     await expect(agent.locator(".tool-disclosure__trigger", { hasText: action })).toHaveAttribute(
       "aria-expanded",
@@ -97,6 +90,7 @@ test("windowed subagent groups keep every lifecycle body reachable after polling
   });
   await followup.scrollIntoViewIfNeeded();
   await expect(followup).toBeInViewport();
+  await expect(agent.locator(".activity-group")).toHaveCount(0);
 });
 
 test("in-surface loading reveals Agent history without waiting for Voice history", async ({

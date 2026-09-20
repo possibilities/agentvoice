@@ -1,5 +1,7 @@
 # 0089: Render native file changes as top-level diff cards
 
+Status: Presentation superseded by [ADR 0105](0105-compose-transcript-events-from-primitives.md).
+
 Accepted 2026-09-16. Refines [0057](0057-responsive-web-transcripts.md),
 [0075](0075-own-web-transcript-ui.md), and
 [0077](0077-bounded-transcript-content-summaries.md).

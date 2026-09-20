@@ -1,8 +1,7 @@
-import { ImageIcon, MicIcon } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 import { memo } from "react";
-import { FileChangeMessage } from "@/components/chat/file-change-message";
+import { FileChangeAttachments } from "@/components/chat/file-change-attachments";
 import { MessageBody } from "@/components/chat/message-body";
-import { systemEventCard } from "@/components/chat/system-event-card";
 import { ToolActivityMessage } from "@/components/chat/tool-activity-message";
 import { VoiceMessageModal } from "@/components/chat/voice-message-modal";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -10,28 +9,51 @@ import { MessageContent, MessageHeader, Message as MessageRow } from "@/componen
 import { formatClockTime } from "@/lib/relative-time";
 import type { Message } from "@/types/message";
 
+function SystemMessage({ message }: { message: Message }) {
+  const title =
+    message.nativeItemType === "contextCompaction"
+      ? "Context compaction"
+      : (message.presentation?.title ?? "System");
+  const body = message.presentation?.body ?? message.content;
+  return (
+    <ToolActivityMessage
+      message={{
+        ...message,
+        toolActivity: {
+          name: title,
+          detail: body,
+          state:
+            message.status === "working"
+              ? "running"
+              : message.status === "error"
+                ? "error"
+                : "complete",
+          sections: message.presentation?.details ? [...message.presentation.details] : undefined,
+        },
+      }}
+    />
+  );
+}
+
 export const ChatMessage = memo(function ChatMessage({ message }: { message: Message }) {
-  const SystemEventCard = systemEventCard(message);
-  if (SystemEventCard) return <SystemEventCard message={message} />;
-  if (message.role === "tool" || message.role === "system") {
+  if (message.nativeItemType === "subAgentActivity") return null;
+  if (message.role === "system") return <SystemMessage message={message} />;
+  if (message.role === "tool")
     return message.fileChanges ? (
-      <FileChangeMessage message={message} />
+      <FileChangeAttachments message={message} />
     ) : (
       <ToolActivityMessage message={message} />
     );
-  }
   const isUser = message.role === "user";
   const isVoiceHandoff = isUser && message.presentation?.title === "Via Voice";
   return (
     <MessageRow align="start" data-role={message.role}>
-      <MessageContent className={isVoiceHandoff ? "voice-message" : undefined}>
+      <MessageContent>
         <MessageHeader>
           <span className="message-author">
             {isUser ? "Human" : "Agent"}
-            {isVoiceHandoff ? (
-              <span className="voice-message__source" role="img" aria-label="Via Voice">
-                <MicIcon aria-hidden="true" />
-              </span>
+            {isVoiceHandoff && message.presentation ? (
+              <VoiceMessageModal presentation={message.presentation} original={message.content} />
             ) : null}
           </span>
           {isUser && message.deliveryStatus ? (
@@ -58,9 +80,6 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Mes
             <MessageBody message={message} />
           </BubbleContent>
         </Bubble>
-        {isVoiceHandoff && message.presentation ? (
-          <VoiceMessageModal presentation={message.presentation} original={message.content} />
-        ) : null}
       </MessageContent>
     </MessageRow>
   );

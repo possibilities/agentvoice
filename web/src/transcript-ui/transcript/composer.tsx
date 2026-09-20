@@ -160,6 +160,16 @@ function Composer({
   const canSubmit =
     (draft.trim().length > 0 || images.length > 0) && !unavailable && Boolean(action);
 
+  function focusInputAtEnd(expected?: Element | null) {
+    const node = input.current;
+    if (!node) return;
+    const active = document.activeElement;
+    if (expected && active && active !== expected && active !== document.body && active !== node)
+      return;
+    node.focus({ preventScroll: true });
+    node.setSelectionRange(node.value.length, node.value.length);
+  }
+
   useEffect(() => () => imageSave.current?.abort(), []);
 
   function updateImages(next: ComposerImage[], immediate = true) {
@@ -207,7 +217,7 @@ function Composer({
         if (controller.signal.aborted || !ownsPersistence()) return;
         updateImages([...imagesRef.current, image]);
       }
-      input.current?.focus();
+      focusInputAtEnd(input.current);
     } catch (cause) {
       if (!controller.signal.aborted && ownsPersistence()) setError(failureMessage(cause));
     } finally {
@@ -232,9 +242,9 @@ function Composer({
                 type="button"
                 aria-label={`Remove Image #${index + 1}`}
                 disabled={disabled || (operation !== null && !submissionPending)}
-                onClick={() => {
+                onClick={(event) => {
                   updateImages(imagesRef.current.filter((_, position) => position !== index));
-                  input.current?.focus();
+                  focusInputAtEnd(event.currentTarget);
                 }}
               >
                 <XIcon aria-hidden="true" />
@@ -252,7 +262,7 @@ function Composer({
     updateDraft(next.text, true);
     setError(null);
     requestAnimationFrame(() => {
-      input.current?.focus();
+      input.current?.focus({ preventScroll: true });
       input.current?.setSelectionRange(next.caret, next.caret);
     });
   }
@@ -440,14 +450,14 @@ function Composer({
       setDraft("");
       imagesRef.current = [];
       setImages([]);
-      input.current?.focus();
+      focusInputAtEnd(input.current);
     }
     try {
       await callback();
       if (!optimisticSubmit && ownsPersistence()) {
         updateDraft("", true);
         updateImages([]);
-        input.current?.focus();
+        focusInputAtEnd(input.current);
       }
     } catch (cause) {
       if (!ownsPersistence()) return;
@@ -544,7 +554,14 @@ function Composer({
                         variant="ghost"
                         size="sm"
                         disabled={unavailable || row.disabled}
-                        onClick={() => void run("Removing…", () => onRemoveQueued(row.id))}
+                        onClick={(event) => {
+                          const trigger = event.currentTarget;
+                          void run(
+                            "Removing…",
+                            () => onRemoveQueued(row.id),
+                            () => focusInputAtEnd(trigger),
+                          );
+                        }}
                       >
                         Remove
                       </Button>
@@ -614,11 +631,12 @@ function Composer({
               Saving clipboard image…{" "}
               <button
                 type="button"
-                onClick={() => {
+                onClick={(event) => {
                   imageSave.current?.abort();
                   imageSave.current = null;
                   setSavingImages(false);
                   setError("Image paste cancelled. Any images already attached have been kept.");
+                  focusInputAtEnd(event.currentTarget);
                 }}
               >
                 Cancel paste
@@ -645,6 +663,8 @@ function Composer({
               placeholder={placeholder}
               spellCheck={false}
               value={draft}
+              data-composer-focus-sink="true"
+              data-composer-reachable={!actionsDisabled && !disabled}
               disabled={disabled}
               readOnly={
                 optimisticSubmit
@@ -654,6 +674,12 @@ function Composer({
               onChange={(event) => {
                 updateDraft(event.target.value);
                 setError(null);
+              }}
+              onCompositionStart={(event) => {
+                event.currentTarget.dataset.composing = "true";
+              }}
+              onCompositionEnd={(event) => {
+                delete event.currentTarget.dataset.composing;
               }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
@@ -715,7 +741,7 @@ function Composer({
                         }),
                         true,
                       );
-                      input.current?.focus();
+                      focusInputAtEnd(input.current);
                     }}
                   >
                     {recovery.images?.length ? "Restore sent message" : "Restore sent text"}

@@ -1,9 +1,8 @@
 import { cn } from "cn";
 import { ArrowDownIcon } from "lucide-react";
 import { memo, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActivityGroup } from "../components/chat/activity-group";
 import { ChatMessage } from "../components/chat/chat-message";
-import { RoutingContextCard } from "../components/chat/routing-context-card";
+import { RoutingContextActivity } from "../components/chat/routing-context-activity";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -87,9 +86,7 @@ export interface TranscriptBlockProps {
 
 const BlockContent = memo(function BlockContent({ block }: TranscriptBlockProps) {
   return block.kind === "routing-context" ? (
-    <RoutingContextCard messages={block.messages} context={block.context} />
-  ) : block.kind === "activity" ? (
-    <ActivityGroup messages={block.messages} />
+    <RoutingContextActivity messages={block.messages} context={block.context} />
   ) : (
     <ChatMessage message={block.message} />
   );
@@ -129,12 +126,6 @@ function useTranscriptBlocks(messages: readonly Message[]) {
         ? prior
         : block;
     }
-    if (block.kind === "activity" && prior.kind === "activity") {
-      return block.messages.length === prior.messages.length &&
-        block.messages.every((message, index) => message === prior.messages[index])
-        ? prior
-        : block;
-    }
     return block;
   });
   if (next.length === previous.length && next.every((block, index) => block === previous[index])) {
@@ -145,7 +136,7 @@ function useTranscriptBlocks(messages: readonly Message[]) {
   return next;
 }
 
-/** A single prose message or collapsed activity run, for host-owned layouts. */
+/** A single transcript message or routing update disclosure, for host-owned layouts. */
 export function TranscriptBlock({ block }: TranscriptBlockProps) {
   return (
     <div className="agentchats-transcript">

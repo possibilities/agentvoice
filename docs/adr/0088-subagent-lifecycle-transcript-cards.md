@@ -1,5 +1,7 @@
 # 0088: Render native subagent lifecycle observations as transcript cards
 
+Status: Superseded by [ADR 0105](0105-compose-transcript-events-from-primitives.md).
+
 Accepted 2026-09-16. Extends [0085](0085-system-event-transcript-cards.md).
 
 ## Decision

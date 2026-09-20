@@ -1,6 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { MessageSquareTextIcon, XIcon } from "lucide-react";
+import { MicIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { focusComposerAtEnd } from "../../transcript/focus-composer";
 import type { MessagePresentation } from "../../types/message";
 
 function ModalSection({ heading, children }: { heading: string; children: ReactNode }) {
@@ -30,10 +31,9 @@ export function VoiceMessageModal({
     <Dialog.Root>
       <Dialog.Trigger
         className="voice-message-modal__trigger"
-        aria-label="Inspect voice message"
-        title="Inspect voice message"
+        aria-label="Open voice message details"
       >
-        <MessageSquareTextIcon aria-hidden="true" />
+        <MicIcon aria-hidden="true" />
       </Dialog.Trigger>
       <Dialog.Portal className="agentchats-transcript">
         <Dialog.Backdrop className="voice-message-modal__backdrop" />
@@ -47,6 +47,9 @@ export function VoiceMessageModal({
             <Dialog.Close
               className="voice-message-modal__close"
               aria-label="Close voice message details"
+              onClick={(event) =>
+                focusComposerAtEnd(event.currentTarget, { allowRestoredFocus: true })
+              }
             >
               <XIcon aria-hidden="true" />
             </Dialog.Close>

@@ -139,14 +139,14 @@ different decision. Keep this navigation index and the record's status together.
 - [0082: Let the kernel release service-operation locks](0082-kernel-owned-service-operation-lock.md) — accepted; crash-released flock ownership prevents interrupted lifecycle commands from stranding menu and CLI actions.
 - [0083: Adopt directory role contents as a fenced workspace revision](0083-adopt-directory-role-revisions.md) — accepted; explicit validated capture preserves the workspace role identity and saved settings while advancing desired content without live activation.
 - [0084: Hand self-hosted installation to launchd](0084-launchd-owned-self-install-handoff.md) — accepted; an external launchd transaction owns crash-released installer/service locks and resumes reload after the managed server terminates its initiating turn.
-- [0085: Render observed system events as transcript cards](0085-system-event-transcript-cards.md) — accepted; a static renderer boundary keeps context compaction visible as a system note with shared lane rendering and existing row identity.
+- [0085: Render observed system events as transcript cards](0085-system-event-transcript-cards.md) — presentation superseded by [0105](0105-compose-transcript-events-from-primitives.md); source identity remains.
 - [0086: Illuminate Android connection preparation](0086-illuminated-android-connection-preparation.md) — accepted; Activity-owned preparation presentation keeps audio gates authoritative.
 
 - [0087: Carry gated Android audio energy along the traces](0087-gated-android-trace-energy.md) — accepted; shared clock, independent gated channels, unchanged routes and shipping provenance.
 
-- [0088: Render native subagent lifecycle observations as transcript cards](0088-subagent-lifecycle-transcript-cards.md) — accepted; exact native activity kinds and identities become compact historical notes without inferred settings, Work associations, or live status.
+- [0088: Render native subagent lifecycle observations as transcript cards](0088-subagent-lifecycle-transcript-cards.md) — presentation superseded by [0105](0105-compose-transcript-events-from-primitives.md); lifecycle rows are suppressed.
 
-- [0089: Render native file changes as top-level diff cards](0089-top-level-file-change-diffs.md) — accepted; one correlated file-change item keeps native order and status while exposing lazy Pierre diffs, exact details, and truthful bounded fallbacks.
+- [0089: Render native file changes as top-level diff cards](0089-top-level-file-change-diffs.md) — presentation superseded by [0105](0105-compose-transcript-events-from-primitives.md); source data and inner diffs remain.
 
 - [0090: Deliver bounded manager routing orientation](0090-deliver-manager-routing-orientation.md) — superseded by [0099](0099-retire-live-manager-routing-orientation.md); historical routing outputs remain readable.
 - [0091: Export canonical collaboration task identity](0091-export-canonical-collaboration-identity.md) — accepted and extended by [0100](0100-export-authoritative-turn-timing.md); native thread-spawn paths are reconciled by exact thread ID and exported as explicit verified or error evidence.
@@ -168,3 +168,4 @@ different decision. Keep this navigation index and the record's status together.
 
 - [0103: Retire synthetic subagent lifecycle steering](0103-retire-synthetic-subagent-lifecycle-steering.md) — accepted; native lifecycle remains read-only while Codex's distinct parent result queue remains authoritative.
 - [0104: Attribute local-network privacy to the service runtime](0104-service-local-network-privacy-identity.md) — accepted; the generated runtime plist and legacy LaunchAgent identify the same responsible bundle without changing network exposure or granting consent.
+- [0105: Compose transcript events from conversation primitives](0105-compose-transcript-events-from-primitives.md) — accepted; Human and Agent messages plus one generic Tool call shell replace bespoke event cards and grouped activity shells, while lifecycle rows receive no replacement UI.

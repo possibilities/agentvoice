@@ -53,16 +53,18 @@ owns the current source map and recording/attachment implementation guidance.
   server launch when it has a valid marker; otherwise resolve it when the first
   frontend creates the lazy workspace session. Keep it pinned until server
   shutdown. No reset/deletion or context-policy changes.
-- web/: Agent | Voice browser composition using the AgentVoice-owned transcript
+- web/: Agent browser composition using the AgentVoice-owned transcript
   source in `web/src/transcript-ui/`. Its provider-neutral data helpers, Codex adapters,
   React components, readable style sources and deterministic scoped stylesheet build
   are one internal boundary. It always renders the full observed transcript; there
   is no messages-only detail mode in the renderer, source contract or fixtures.
-  Registered system cards consume the exact native item type copied into the
-  render message, while unknown items keep readable fallback activity.
-  Native file-change items remain independent measured rows rather than collapsed
-  activity children; one ordered multi-file item exposes lazy Pierre diffs and its
-  exact projected record without reading or changing workspace files.
+  Every visible row is a Human message, Agent message, or generic Tool call.
+  Machine events including system, routing, file-change and compaction evidence
+  share the same activity disclosure; file attachments and lazy Pierre diffs are
+  specialized inner details. There is no event-card registry, special compaction
+  UI or collapsed activity group.
+  Subagent lifecycle rows are not presented; direct worker results retain their
+  separate native delivery boundary. Unknown items keep readable fallback activity.
   `server/live-reader.ts` observes the default or explicitly selected workspace
   frontend without fallback, verifies the live
   controller and fences native history/live snapshots and saved voice tails.

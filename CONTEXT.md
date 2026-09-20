@@ -290,11 +290,14 @@ _Avoid_: speech replay, control attachment, transcript database.
 presentation adapters, React transcript/composer/document components, and scoped
 styles under `web/src/transcript-ui/`. It renders one headerless Agent stream and
 accepts host-authorized Agent input without owning native history, transport, or
-work execution. Projected voice handoffs remain readable `Via Voice` Human rows;
-raw Voice observations are not a second visual lane. It has one full-transcript surface; registered system cards may
-consume an exact native item type copied into the render message. _Avoid_:
-raw Voice lane, pane preference, messages-only detail mode, shared AgentChats package,
-vendor archive, cross-checkout UI import.
+work execution. Projected voice handoffs remain readable Human rows with an
+accessible microphone details trigger;
+raw Voice observations are not a second visual lane. It has one full-transcript
+surface; top-level Human and Agent messages plus one generic Tool call disclosure
+render observed events without a parallel card system. Specialized attachments
+stay inside Tool call details. _Avoid_: raw Voice lane, pane preference,
+bespoke event card, lifecycle event row, messages-only detail mode, shared
+AgentChats package, vendor archive, cross-checkout UI import.
 
 **Live conversation snapshot** — A bounded projection of conversation items and
 updates actually received by the controller, with an exact publication-sequence
@@ -312,9 +315,9 @@ result store from child observations. The result can join an active wait or the
 parent's next turn. Native `subAgentActivity` items remain read-only history.
 _Avoid_: completion bridge, lifecycle steering, AgentVoice result delivery.
 
-**Historical routing context card** — A read-only transcript rendering of a saved
+**Historical routing context activity** — A read-only transcript rendering of a saved
 native `agentusage.routing_context` output created before the live routing producer
-was retired. AgentVoice retains its parser and card so old conversation history
+was retired. AgentVoice retains its parser and ordinary disclosure so old conversation history
 remains intelligible. It does not poll, publish, inject turns or expose fresh routing
 state. _Avoid_: current routing state, routing query, execution authority.
 

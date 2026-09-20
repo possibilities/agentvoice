@@ -12,6 +12,7 @@ import {
   isLocalMarkdownHref,
   type LoadedDocument,
 } from "./document-viewer-context";
+import { focusComposerAtEnd } from "./focus-composer";
 
 export type {
   DocumentCandidate,
@@ -269,7 +270,12 @@ export function DocumentViewerProvider({
                     Back
                   </button>
                 ) : null}
-                <Dialog.Close aria-label="Close document">
+                <Dialog.Close
+                  aria-label="Close document"
+                  onClick={(event) =>
+                    focusComposerAtEnd(event.currentTarget, { allowRestoredFocus: true })
+                  }
+                >
                   <XIcon aria-hidden="true" />
                   <span>Close</span>
                 </Dialog.Close>

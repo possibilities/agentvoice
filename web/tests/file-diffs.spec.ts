@@ -4,7 +4,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/tests/transcript-ui.html");
 });
 
-test("file operations stay top-level and disclose ordered Pierre diffs and original detail", async ({
+test("file operations use ordered attachments with Pierre diffs and original evidence", async ({
   page,
 }) => {
   await page.evaluate(() => {
@@ -80,49 +80,48 @@ test("file operations stay top-level and disclose ordered Pierre diffs and origi
     ]);
   });
 
-  const card = page.locator(".file-change-event");
-  await expect(card).toBeVisible();
-  await expect(page.locator(".activity-group")).toHaveCount(2);
-  await expect(page.locator(".activity-group .file-change-event")).toHaveCount(0);
+  const row = page.locator('.tool-disclosure[data-transcript-type="tool-call"]', {
+    hasText: "File change",
+  });
+  await expect(row).toBeVisible();
+  await expect(page.locator(".tool-disclosure")).toHaveCount(5);
+  await row.getByRole("button").first().click();
+  await expect(row.locator(".tool-disclosure__summary")).toHaveText("Edited 4 files");
+  await expect(row.locator('[data-slot="attachment"]')).toHaveCount(4);
 
-  const cardTrigger = card.locator(":scope .tool-disclosure__trigger");
-  await expect(cardTrigger).toHaveAttribute("aria-expanded", "true");
-  await expect(cardTrigger).toContainText("Edited");
-  await expect(cardTrigger.getByLabel("2 lines added, 2 lines removed")).toBeVisible();
-
-  const paths = card.locator(".file-disclosure__path");
-  await expect(paths).toHaveCount(5);
+  const paths = row.locator('[data-slot="attachment-title"]');
+  await expect(paths).toHaveCount(4);
   expect(await paths.allTextContents()).toEqual([
     "/work/src/new.ts",
     "/work/src/edit.ts",
     "/work/src/old.ts",
     "/work/src/before.ts → /work/src/after.ts",
-    "Original details",
   ]);
   await expect(
-    card.getByLabel("renamed file /work/src/before.ts → /work/src/after.ts: path only"),
-  ).toBeDisabled();
+    row
+      .locator('[data-slot="attachment"]', {
+        hasText: "/work/src/before.ts → /work/src/after.ts",
+      })
+      .getByRole("button"),
+  ).toHaveCount(0);
 
-  await card.getByLabel("Expand added file /work/src/new.ts").click();
-  await card.getByLabel("Expand edited file /work/src/edit.ts").click();
-  await card.getByLabel("Expand deleted file /work/src/old.ts").click();
-  await expect(card.locator(".pierre-diff")).toHaveCount(3);
+  await row.getByLabel("Expand added file /work/src/new.ts").click();
+  await row.getByLabel("Expand edited file /work/src/edit.ts").click();
+  await row.getByLabel("Expand deleted file /work/src/old.ts").click();
+  await expect(row.locator(".pierre-diff")).toHaveCount(3);
   await expect(
-    card.getByText("This diff was truncated by the source.", { exact: false }),
+    row.getByText("This diff was truncated by the source.", { exact: false }),
   ).toBeVisible();
 
-  const originalDetails = card.getByLabel("Expand original file operation details");
-  await originalDetails.focus();
-  await originalDetails.press("Enter");
-  await expect(card.getByLabel("Original record", { exact: true })).toContainText('"id": "patch"');
+  await expect(row.getByLabel("Original record", { exact: true })).toContainText('"id": "patch"');
 
   await page.locator("#host-marker").click();
   await page.setViewportSize({ width: 1280, height: 1600 });
   await page.locator("main").evaluate((element) => {
     element.style.height = "1500px";
   });
-  await card.screenshot({ path: "test-results/file-diffs-card.png" });
+  await row.screenshot({ path: "test-results/file-diff-attachments.png" });
   await page.setViewportSize({ width: 420, height: 1600 });
   await expect(paths.nth(3)).toBeVisible();
-  await card.screenshot({ path: "test-results/file-diffs-card-narrow.png" });
+  await row.screenshot({ path: "test-results/file-diff-attachments-narrow.png" });
 });

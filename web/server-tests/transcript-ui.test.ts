@@ -6,7 +6,7 @@ import {
 import { groupTranscript, mergeTranscript } from "../src/transcript-ui/transcript/index.ts";
 
 describe("owned transcript data surface", () => {
-  test("groups consecutive activities without changing message order", () => {
+  test("keeps consecutive activities as organic disclosures in message order", () => {
     const messages = [
       { id: "answer", role: "assistant", content: "Answer", status: "complete" },
       { id: "tool-1", role: "tool", content: "one", status: "complete" },
@@ -14,10 +14,8 @@ describe("owned transcript data surface", () => {
       { id: "next", role: "assistant", content: "Next", status: "complete" },
     ] as const;
     const blocks = groupTranscript(messages);
-    expect(blocks.map((block) => block.id)).toEqual(["answer", "tool-1", "next"]);
-    const activity = blocks[1];
-    if (!activity || activity.kind !== "activity") throw new Error("Expected activity group");
-    expect(activity.messages.map((message) => message.id)).toEqual(["tool-1", "tool-2"]);
+    expect(blocks.map((block) => block.id)).toEqual(["answer", "tool-1", "tool-2", "next"]);
+    expect(blocks.every((block) => block.kind === "message")).toBe(true);
   });
 
   test("keeps canonical and unavailable file operations as ordered top-level rows", () => {
@@ -66,18 +64,12 @@ describe("owned transcript data surface", () => {
     ]);
 
     expect(blocks.map((block) => [block.kind, block.id])).toEqual([
-      ["activity", "command-1"],
+      ["message", "command-1"],
+      ["message", "command-2"],
       ["message", "files"],
-      ["activity", "command-3"],
+      ["message", "command-3"],
+      ["message", "command-4"],
       ["message", "files-unavailable"],
-    ]);
-    expect(blocks[0]?.kind === "activity" ? blocks[0].messages.map(({ id }) => id) : []).toEqual([
-      "command-1",
-      "command-2",
-    ]);
-    expect(blocks[2]?.kind === "activity" ? blocks[2].messages.map(({ id }) => id) : []).toEqual([
-      "command-3",
-      "command-4",
     ]);
   });
 

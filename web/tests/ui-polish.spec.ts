@@ -50,10 +50,10 @@ for (const width of [1440, 390]) {
     await expect(status).toHaveCSS("border-radius", "0px");
     await expect(page.locator("header")).toHaveCount(0);
 
-    const voiceSource = page.getByRole("img", { name: "Via Voice", exact: true });
-    await expect(voiceSource).toBeVisible();
-    await expect(voiceSource).not.toHaveAttribute("title");
-    const inspect = page.getByRole("button", { name: "Inspect voice message" });
+    await expect(page.getByText("Via Voice", { exact: true })).toHaveCount(0);
+    const inspect = page.getByRole("button", { name: "Open voice message details" });
+    await expect(inspect.locator("svg")).toBeVisible();
+    await expect(inspect).not.toHaveAttribute("title");
     await page.screenshot({ path: `test-results/polish-headerless-${width}.png` });
     await inspect.click();
     const dialog = page.getByRole("dialog", { name: "Voice message details" });

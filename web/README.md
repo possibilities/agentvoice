@@ -4,7 +4,10 @@
 One full-height Agent transcript uses the AgentVoice-owned UI with Human / Agent
 labels, Markdown and inline tool/diff disclosures. There is no page header, toolbar,
 pane selector, raw Voice lane, or call control. Native voice handoffs remain readable
-as `Via Voice` Human cards with an accessible microphone marker and details dialog.
+as ordinary Human messages. A compact microphone button immediately beside `Human`
+opens the complete details without a tooltip or duplicate visible source label.
+Voice-originated and typed Human rows retain the same existing secondary bubble
+chrome; only the bespoke synthetic-event card layer is retired.
 The composer has no visible Send button or follow-up selector: Enter sends while idle,
 Enter steers while Agent is working, and Shift+Enter inserts a new line. Clipboard images become
 numbered removable local-image attachments (four per message, 10 MiB each); ordinary
@@ -24,6 +27,13 @@ batched. A newly installed native bridge requires a later kiosk relaunch; old
 unidentified browser slots remain explicitly recoverable rather than being
 silently adopted from another active context.
 A single dock keeps the full-width textarea stable as drafts and queued messages expand.
+Printable typing on noninteractive transcript space appends at the end of the current
+draft and hands focus to the textarea. With the textarea focused, plain Page Up,
+Page Down, Home, and End move the transcript while keeping the draft and focus in
+place; modified shortcuts and IME composition keep their native behavior. Safe
+pointer completion of transient queue, attachment, disclosure, and viewer actions
+returns focus and the caret to the draft end without interrupting active controls,
+selection, dialogs, or document reading.
 Existing host-owned queue rows remain readable and removable, but this UI cannot
 create, edit, resume, or steer queued rows. Empty sessions use one readable heading at the center of the transcript area,
 without secondary guidance or notices. Populated transcripts retain their status
@@ -33,8 +43,8 @@ arrives, preserving drafts, focus and reading state.
 
 The Agent transcript windows measured message blocks, opens at the latest message and follows
 new text. Stable row identities retain tool expansion across polls, appends and
-group changes. Browser find sees mounted history; the API retains the complete
-loaded transcript. A single expanded activity group remains one measured block.
+disclosure changes. Browser find sees mounted history; the API retains the complete
+loaded transcript. Each tool disclosure remains its own measured row.
 With an overflowing transcript, the first deliberate upward wheel, touch or
 keyboard input releases follow, even within a pixel of the bottom. It lets you
 read earlier text and shows the shared jump-to-latest chip with a count of new
@@ -164,12 +174,13 @@ Codex databases directly nor resumes threads, answers approvals,
 loads launch configuration, starts media or changes server protocols.
 
 Canonical realtime delegation envelopes use the shared Codex presentation helper:
-the delegated input appears as “Via Voice”, with an upper-right inspection button
-for displayed text, optional Voice context and the exact Original message. Session
+the delegated input appears as an ordinary Human message, with a microphone details
+button immediately beside `Human` for displayed text, optional Voice context and
+the exact Original message. Session
 endings display as context handoffs. Unknown,
 malformed or mixed envelopes retain their ordinary presentation; original content
 is never rewritten. Column width, responsive padding and message spacing come
-from the shared package, including in the two narrow lanes.
+from the shared package, including at narrow widths.
 Version 0.3.4 retains the larger monospaced console theme, compact spacing and
 composer focus treatment while adding windowing, stable disclosure state and
 optimistic submission support. See [ADR 0057](../docs/adr/0057-responsive-web-transcripts.md).
@@ -181,15 +192,15 @@ through three levels, and keeps plain or malformed text intact. Nested arbitrary
 string properties are not rewritten. Oversized encoded strings and unsafe numeric
 values remain in their original representation.
 
-Native file-change items render as independent, correlated transcript cards
-between adjacent activity groups. Each card preserves the received multi-file
-order and streaming/final status, shows paths and add/remove counts immediately,
-and lazy-loads Pierre only for an opened file diff. Create, edit, delete and rename
+Native file-change items render in the same generic Tool call disclosure as every
+other machine event. Its inner file attachments preserve the received multi-file
+order and streaming/final status, show paths and add/remove counts when disclosed,
+and lazy-load Pierre only for an opened file diff. Create, edit, delete and rename
 use the native change kind and optional destination path. Empty/path-only changes,
 source-truncated diffs, parse failures and oversized unavailable items remain
 explicit, with the exact projected record available behind Details. The renderer
 never reads or changes the workspace. See
-[ADR 0089](../docs/adr/0089-top-level-file-change-diffs.md).
+[ADR 0105](../docs/adr/0105-compose-transcript-events-from-primitives.md).
 
 Live snapshots keep composer controls separate from transcript rendering. Unchanged
 controls retain their identity, so transcript-only polls do not rerender the input

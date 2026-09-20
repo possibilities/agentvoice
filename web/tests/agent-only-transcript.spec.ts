@@ -86,7 +86,7 @@ for (const viewport of [
   { name: "desktop", width: 1440, height: 1000 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
-  test(`renders one headerless Agent transcript with every projected card on ${viewport.name}`, async ({
+  test(`renders one headerless Agent transcript with every projected block on ${viewport.name}`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -137,19 +137,36 @@ for (const viewport of [
     expect((await agent.boundingBox())?.y).toBe(0);
     await expect(page.getByRole("textbox", { name: "Message Agent" })).toBeVisible();
     await expect(agent.getByRole("button", { name: "Command bun run test" })).toBeVisible();
-    await expect(agent.getByRole("note", { name: "Context compacted" })).toBeVisible();
-    await expect(agent.locator(".file-change-event")).toBeVisible();
-    await expect(agent.getByRole("note", { name: "Routing context" })).toBeVisible();
+    for (const label of ["Context compaction", "File change", "Routing context"])
+      await expect(
+        agent.locator('.tool-disclosure[data-transcript-type="tool-call"]', { hasText: label }),
+      ).toBeVisible();
 
-    const voiceIcon = agent.getByRole("img", { name: "Via Voice", exact: true });
-    await expect(voiceIcon).toHaveCount(1);
-    await expect(voiceIcon.locator("..")).toHaveClass("message-author");
-    await expect(voiceIcon.locator("..")).toContainText("Human");
-    await expect(voiceIcon).not.toHaveAttribute("title");
-    await expect(
-      agent.getByText("Typed follow-up", { exact: true }).locator(".."),
-    ).not.toContainText("Via Voice");
-    const inspect = agent.getByRole("button", { name: "Inspect voice message" });
+    const humanRows = agent.locator('[data-slot="message"][data-role="user"]');
+    await expect(humanRows).toHaveCount(2);
+    const humanChrome = await humanRows
+      .locator('[data-slot="message-content"]')
+      .evaluateAll((rows) =>
+        rows.map((row) => {
+          const style = getComputedStyle(row);
+          return {
+            backgroundColor: style.backgroundColor,
+            borderLeftColor: style.borderLeftColor,
+            borderLeftWidth: style.borderLeftWidth,
+          };
+        }),
+      );
+    expect(humanChrome[0]).toEqual(humanChrome[1]);
+    expect(humanChrome[0]?.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+    expect(humanChrome[0]?.borderLeftWidth).toBe("2px");
+
+    const inspect = agent.getByRole("button", { name: "Open voice message details" });
+    await expect(inspect).toHaveCount(1);
+    await expect(inspect.locator("..")).toHaveClass("message-author");
+    await expect(inspect.locator("..")).toHaveText("Human");
+    await expect(inspect.locator("svg")).toBeVisible();
+    await expect(inspect).not.toHaveAttribute("title");
+    await expect(agent.getByText("Via Voice", { exact: true })).toHaveCount(0);
     await inspect.focus();
     await expect(inspect).toBeFocused();
     await inspect.click();

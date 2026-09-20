@@ -1,4 +1,5 @@
 import {
+  type KeyboardEvent,
   type MouseEvent,
   memo,
   useCallback,
@@ -20,6 +21,7 @@ import {
 import { readLiveView } from "./read-live-view.ts";
 import { reconcileView, transcriptPresentationView } from "./reconcile-view.ts";
 import type { SaveClipboardImage } from "./transcript-ui/transcript/composer-images";
+import { focusComposerAtEnd } from "./transcript-ui/transcript/focus-composer";
 import {
   DocumentViewerProvider,
   Transcript,
@@ -39,10 +41,97 @@ const webReaderUnavailable =
 
 const interactiveComposerTarget =
   'a[href], button, input, textarea, select, option, label, summary, [contenteditable="true"], [role="button"], [role="checkbox"], [role="combobox"], [role="link"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="radio"], [role="slider"], [role="spinbutton"], [role="switch"], [role="tab"], [role="textbox"], [tabindex]:not([tabindex="-1"])';
+const interactiveTranscriptTarget =
+  'a[href], button, input, textarea, select, option, label, summary, [contenteditable="true"], [role="button"], [role="checkbox"], [role="combobox"], [role="link"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="radio"], [role="slider"], [role="spinbutton"], [role="switch"], [role="tab"], [role="textbox"]';
 
 function focusComposerFromDock(event: MouseEvent<HTMLDivElement>) {
   if (!(event.target instanceof Element) || event.target.closest(interactiveComposerTarget)) return;
-  event.currentTarget.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+  focusComposerAtEnd(event.target);
+}
+
+function restoreComposerAfterTranscriptClick(event: MouseEvent<HTMLElement>, enabled: boolean) {
+  if (!enabled || !(event.target instanceof Element)) return;
+  const selection = window.getSelection();
+  if (selection && !selection.isCollapsed) return;
+  const trigger = event.target.closest<HTMLElement>('[data-slot="collapsible-trigger"]');
+  if (trigger) {
+    requestAnimationFrame(() => {
+      if (trigger.getAttribute("aria-expanded") === "false") focusComposerAtEnd(trigger);
+    });
+    return;
+  }
+  if (
+    event.target.closest(interactiveTranscriptTarget) ||
+    event.target.closest("[data-windowed-row-key]")
+  )
+    return;
+  focusComposerAtEnd(event.target);
+}
+
+function handoffTranscriptText(event: KeyboardEvent<HTMLElement>, enabled: boolean) {
+  if (
+    !enabled ||
+    event.defaultPrevented ||
+    event.nativeEvent.isComposing ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    event.key.length !== 1
+  )
+    return;
+  if (!(event.target instanceof Element) || event.target.closest(interactiveTranscriptTarget))
+    return;
+  const selection = window.getSelection();
+  if (selection && !selection.isCollapsed) return;
+  const textarea = event.currentTarget.querySelector<HTMLTextAreaElement>("textarea");
+  if (!textarea || textarea.disabled || textarea.readOnly) return;
+  event.preventDefault();
+  const value = `${textarea.value}${event.key}`;
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  setter?.call(textarea, value);
+  textarea.dispatchEvent(
+    new InputEvent("input", { bubbles: true, inputType: "insertText", data: event.key }),
+  );
+  textarea.focus();
+  textarea.setSelectionRange(value.length, value.length);
+}
+
+function navigateTranscriptFromComposer(event: KeyboardEvent<HTMLElement>) {
+  if (
+    !(event.target instanceof HTMLTextAreaElement) ||
+    event.defaultPrevented ||
+    event.nativeEvent.isComposing ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    event.shiftKey ||
+    !["PageUp", "PageDown", "Home", "End"].includes(event.key)
+  )
+    return false;
+  const transcript = event.currentTarget.querySelector<HTMLElement>(
+    '[role="region"][aria-label="Agent transcript"]',
+  );
+  if (!transcript) return false;
+  event.preventDefault();
+  // Let the scroller release tail-following before moving it on behalf of the
+  // still-focused composer. This reuses the transcript's normal reading-intent
+  // path without moving focus or synthesizing text input.
+  transcript.dispatchEvent(
+    new globalThis.KeyboardEvent("keydown", { key: event.key, bubbles: true }),
+  );
+  const top =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? transcript.scrollHeight
+        : transcript.scrollTop + (event.key === "PageUp" ? -1 : 1) * transcript.clientHeight;
+  transcript.scrollTo({ top, behavior: "auto" });
+  return true;
+}
+
+function routeTranscriptKeyboard(event: KeyboardEvent<HTMLElement>, composerEnabled: boolean) {
+  if (navigateTranscriptFromComposer(event)) return;
+  handoffTranscriptText(event, composerEnabled);
 }
 
 export function App() {
@@ -166,6 +255,10 @@ export function App() {
     const queue = optimisticQueue(controls.queue, localSubmissions, view.agent);
     return queue === controls.queue ? controls : { ...controls, queue };
   }, [view.agentControls, localSubmissions, view.agent]);
+  const composerDisabled =
+    !displayedControls ||
+    (view.phase !== "live" && view.phase !== "detached") ||
+    !displayedControls.available;
   // Keep placeholders until the rendered native snapshot contains their exact identity.
   useEffect(() => {
     setSubmissions((current) => {
@@ -186,7 +279,15 @@ export function App() {
               {statusText}
             </p>
           ) : null}
-          <section className="lane" data-lane="agent" aria-label="Agent" hidden={!!holding}>
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: Keyboard transcript handoff is handled separately on keydown capture. */}
+          <section
+            className="lane"
+            data-lane="agent"
+            aria-label="Agent"
+            hidden={!!holding}
+            onKeyDownCapture={(event) => routeTranscriptKeyboard(event, !composerDisabled)}
+            onClick={(event) => restoreComposerAfterTranscriptClick(event, !composerDisabled)}
+          >
             <TranscriptLane
               viewId={transcriptView.id}
               phase={transcriptView.phase}
@@ -203,10 +304,7 @@ export function App() {
                   persistenceInstanceId={persistenceInstanceId}
                   observedSubmissionIds={observedSubmissionIds}
                   controls={displayedControls}
-                  disabled={
-                    (view.phase !== "live" && view.phase !== "detached") ||
-                    !displayedControls.available
-                  }
+                  disabled={composerDisabled}
                   onAccepted={commandAccepted}
                   onBegin={beginSubmission}
                   onSettle={settleSubmission}

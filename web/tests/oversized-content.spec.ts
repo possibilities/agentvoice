@@ -52,11 +52,10 @@ test("oversized tool content keeps real status, failure context, and omission de
   await page.goto("/");
 
   const agent = page.getByRole("region", { name: "Agent transcript", exact: true });
-  const group = agent.locator(".activity-group__trigger");
-  await expect(group).toContainText("1 failed");
-  await group.click();
   const completed = agent.locator(".tool-disclosure").filter({ hasText: "completed" });
   const failed = agent.locator(".tool-disclosure").filter({ hasText: "failed" });
+  await expect(agent.locator(".tool-disclosure")).toHaveCount(2);
+  await expect(agent.locator(".activity-group")).toHaveCount(0);
   await expect(completed.locator(".tool-disclosure__name")).toHaveText("agenthud_snapshot");
   await expect(failed.locator(".tool-disclosure__name")).toHaveText("Failed · agenthud_snapshot");
   await expect(agent.getByText("Content unavailable (oversized)")).toHaveCount(0);
