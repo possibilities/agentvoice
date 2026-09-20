@@ -507,6 +507,91 @@ test("initial history pages finish without waiting for further browser polls", a
   }
 });
 
+test("unchanged polling reuses its projection and every visible source revision invalidates it", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    h.history([user("history", "History")]);
+    h.feed.update({
+      complete: true,
+      threads: [
+        {
+          id: "main",
+          parentThreadId: null,
+          name: null,
+          status: "idle",
+          activeFlags: [],
+          turn: null,
+        },
+      ],
+    });
+    await h.start();
+    let previous = await until(
+      reader,
+      (view) => view.phase === "live" && !view.agentHistoryLoading && view.agent.length === 1,
+    );
+
+    await Bun.sleep(260);
+    expect(await reader.read()).toBe(previous);
+
+    await reader.agentCommand({
+      action: "queue",
+      viewId: previous.id,
+      requestId: randomUUID(),
+      text: "Queued",
+    });
+    let changed = await reader.read();
+    expect(changed).not.toBe(previous);
+    expect(changed.agentControls?.queue).toHaveLength(1);
+    previous = changed;
+
+    h.voice("voice.item.completed", {
+      item: {
+        type: "transcriptSegment",
+        id: "voice",
+        realtimeSessionId: "rt",
+        role: "user",
+        text: "Spoken",
+      },
+    });
+    await Bun.sleep(260);
+    changed = await reader.read();
+    expect(changed).not.toBe(previous);
+    expect(changed.voice).toHaveLength(1);
+    previous = changed;
+
+    h.history([user("history", "History"), user("new", "New history")]);
+    h.feed.conversation({
+      event: "conversation.item.completed",
+      revision: 1,
+      data: {
+        threadId: "main",
+        turnId: "turn",
+        item: { type: "userMessage", id: "new", content: [{ type: "text", text: "New history" }] },
+      },
+    });
+    changed = await until(reader, (view) =>
+      view.agent.some((message) => message.content === "New history"),
+    );
+    expect(changed).not.toBe(previous);
+    previous = changed;
+
+    await h.hangup();
+    changed = await until(reader, (view) => view.phase === "detached");
+    expect(changed).not.toBe(previous);
+    previous = changed;
+
+    h.history([user("successor", "Successor")]);
+    h.replace("successor");
+    changed = await until(reader, (view) => view.agent[0]?.content === "Successor");
+    expect(changed).not.toBe(previous);
+    expect(changed.id).not.toBe(previous.id);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("a slow first history reply cannot hold the centered loader forever", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir, 50);

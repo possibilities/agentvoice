@@ -4,7 +4,15 @@ import { liveApi } from "../server/api.ts";
 import type { LiveView } from "../src/types.ts";
 
 test("large live snapshots are compressed and unchanged polls return 304", async () => {
-  let view: LiveView = {
+  let serializations = 0;
+  const counted = (value: LiveView): LiveView =>
+    Object.defineProperty(value, "toJSON", {
+      value: () => {
+        serializations++;
+        return { ...value };
+      },
+    });
+  let view: LiveView = counted({
     phase: "detached",
     id: "view",
     voice: [],
@@ -22,7 +30,7 @@ test("large live snapshots are compressed and unchanged polls return 304", async
         },
       },
     ],
-  };
+  });
   let handler = liveApi({ read: async () => view }, process.env);
   const server = createServer((request, response) =>
     handler(request, response, () => response.writeHead(404).end()),
@@ -41,11 +49,14 @@ test("large live snapshots are compressed and unchanged polls return 304", async
     expect(Number(first.headers.get("Content-Length"))).toBeLessThan(4 * 1024 * 1024);
     expect(((await first.json()) as LiveView).id).toBe("view");
 
-    const unchanged = await fetch(url, { headers: { "If-None-Match": etag! } });
-    expect(unchanged.status).toBe(304);
-    expect(await unchanged.text()).toBe("");
+    for (let poll = 0; poll < 25; poll++) {
+      const unchanged = await fetch(url, { headers: { "If-None-Match": etag! } });
+      expect(unchanged.status).toBe(304);
+      expect(await unchanged.text()).toBe("");
+    }
+    expect(serializations).toBe(1);
 
-    view = { ...view, phase: "live" };
+    view = counted({ ...view, phase: "live" });
     const changed = await fetch(url, { headers: { "If-None-Match": etag! } });
     expect(changed.status).toBe(200);
     expect(changed.headers.get("ETag")).not.toBe(etag);
@@ -53,7 +64,7 @@ test("large live snapshots are compressed and unchanged polls return 304", async
 
     // A surviving page can present its validator to a new serve process. Same
     // byte length must not collide with a different first snapshot.
-    view = { ...view, phase: "detached", id: "next" };
+    view = counted({ ...view, phase: "detached", id: "next" });
     handler = liveApi({ read: async () => view }, process.env);
     const restarted = await fetch(url, { headers: { "If-None-Match": etag! } });
     expect(restarted.status).toBe(200);

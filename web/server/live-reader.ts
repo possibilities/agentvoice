@@ -143,6 +143,22 @@ export type LocalImageViewContext = {
 };
 type HistoryPass = { rows: AgentItem[]; cursor?: string; bytes: number; revision: number };
 type HistoryAttempt = { client?: ControlSocket; closed?: boolean };
+type ProjectionStamp = {
+  identity: Identity;
+  phase: LiveView["phase"];
+  stateSequence: number;
+  liveRevision: number;
+  liveThroughSequence: number;
+  historyRevision: number;
+  loadedRevision: number;
+  initialHistorySettled: boolean;
+  historyNotice?: string;
+  voiceRevision: number;
+  hasVoiceTail: boolean;
+  voiceHistoryLoaded: boolean;
+  voiceNotice?: string;
+  controls: string;
+};
 type ControlTurn = {
   id: string;
   status: "inProgress" | "completed" | "interrupted" | "failed";
@@ -177,6 +193,25 @@ function inputAvailable(root: { status: string } | undefined, turn: ControlTurn 
   );
 }
 
+function sameProjection(left: ProjectionStamp, right: ProjectionStamp) {
+  return (
+    left.identity === right.identity &&
+    left.phase === right.phase &&
+    left.stateSequence === right.stateSequence &&
+    left.liveRevision === right.liveRevision &&
+    left.liveThroughSequence === right.liveThroughSequence &&
+    left.historyRevision === right.historyRevision &&
+    left.loadedRevision === right.loadedRevision &&
+    left.initialHistorySettled === right.initialHistorySettled &&
+    left.historyNotice === right.historyNotice &&
+    left.voiceRevision === right.voiceRevision &&
+    left.hasVoiceTail === right.hasVoiceTail &&
+    left.voiceHistoryLoaded === right.voiceHistoryLoaded &&
+    left.voiceNotice === right.voiceNotice &&
+    left.controls === right.controls
+  );
+}
+
 /** Host-selected workspace adapter. The browser can neither choose sockets nor submit RPC methods. */
 export class LiveReader {
   private observer?: Observer;
@@ -204,6 +239,8 @@ export class LiveReader {
   private historyPending = false;
   private historyAttempt?: HistoryAttempt;
   private historyNotice?: string;
+  private voiceRevision = 0;
+  private projection?: { stamp: ProjectionStamp; view: LiveView };
   private closed = false;
   private pending?: Promise<LiveView>;
   private cached = empty("connecting");
@@ -327,6 +364,7 @@ export class LiveReader {
   }
 
   private disconnectLive() {
+    this.projection = undefined;
     this.controls.disconnect();
     this.eventClient?.close();
     this.eventClient = undefined;
@@ -367,6 +405,7 @@ export class LiveReader {
     this.loadedRevision = -1;
     this.initialHistorySettled = false;
     this.historyNotice = undefined;
+    this.voiceRevision = 0;
     this.cached = empty("connecting");
   }
 
@@ -882,6 +921,64 @@ export class LiveReader {
     // Establish the current live incarnation before consuming a background history slot.
     // This keeps a newly opened reader useful while the root is actively working.
     this.loadHistoryPage(identity, params);
+    let voiceNotice = this.voice.notice;
+    try {
+      if (!this.tail) {
+        const recording = savedRecordings(this.stateDir, identity.workspace).find(
+          (row) => row.threadId === identity.threadId,
+        );
+        if (recording) this.tail = new VoiceRecordingTail(recording.path, identity);
+      }
+      if (this.tail) {
+        // Drain available chunks, including a long record split across reads, with a per-poll budget.
+        for (let count = 0; count < 32; count++) {
+          const lines = this.tail.read();
+          for (const line of lines) {
+            this.voice.accept(line, identity.threadId);
+            this.voiceRevision++;
+          }
+          if (lines.length === 0 && this.tail.initialHistoryLoaded) break;
+        }
+      } else voiceNotice = "Waiting for the voice transcript.";
+    } catch (error) {
+      this.diagnose("voice.tail", error);
+      voiceNotice = "Voice transcript unavailable. Reconnecting…";
+      this.tail?.close();
+      this.tail = undefined;
+    }
+    const interruptedFinal = this.interruptedRead(identity, client);
+    if (interruptedFinal) return interruptedFinal;
+    if (!this.current(identity)) {
+      if (!this.observedReplacement(identity))
+        return this.retained("unavailable", "AgentVoice observer disconnected. Reconnecting…");
+      this.resetCall();
+      return empty("connecting");
+    }
+    if (this.actionable(identity)) void this.controls.drain();
+    const phase = this.sessionPhase(identity);
+    const agentControls = this.controlsView();
+    const effectiveVoiceNotice = voiceNotice ?? this.voice.notice;
+    // Native/event sequences cover live items and turn state. The remaining fields cover
+    // independently published history, the recording tail, local controls, and attachment phase.
+    const stamp: ProjectionStamp = {
+      identity,
+      phase,
+      stateSequence: before.sequence,
+      liveRevision: live.revision,
+      liveThroughSequence: live.throughSequence,
+      historyRevision: this.historyRevision,
+      loadedRevision: this.loadedRevision,
+      initialHistorySettled: this.initialHistorySettled,
+      historyNotice: this.historyNotice,
+      voiceRevision: this.voiceRevision,
+      hasVoiceTail: this.tail !== undefined,
+      voiceHistoryLoaded: this.tail?.initialHistoryLoaded === true,
+      voiceNotice: effectiveVoiceNotice,
+      controls: JSON.stringify(agentControls),
+    };
+    if (this.projection && sameProjection(this.projection.stamp, stamp))
+      return this.projection.view;
+
     const entries = new Map(this.history.map((entry) => [itemKey(entry), entry]));
     const messages = new Map(this.history.map((entry) => [itemKey(entry), agentMessage(entry)]));
     for (const entry of live.items) {
@@ -931,37 +1028,6 @@ export class LiveReader {
       included.add(key);
     }
     this.agentOrder = order;
-    let voiceNotice = this.voice.notice;
-    try {
-      if (!this.tail) {
-        const recording = savedRecordings(this.stateDir, identity.workspace).find(
-          (row) => row.threadId === identity.threadId,
-        );
-        if (recording) this.tail = new VoiceRecordingTail(recording.path, identity);
-      }
-      if (this.tail) {
-        // Drain available chunks, including a long record split across reads, with a per-poll budget.
-        for (let count = 0; count < 32; count++) {
-          const lines = this.tail.read();
-          for (const line of lines) this.voice.accept(line, identity.threadId);
-          if (lines.length === 0 && this.tail.initialHistoryLoaded) break;
-        }
-      } else voiceNotice = "Waiting for the voice transcript.";
-    } catch (error) {
-      this.diagnose("voice.tail", error);
-      voiceNotice = "Voice transcript unavailable. Reconnecting…";
-      this.tail?.close();
-      this.tail = undefined;
-    }
-    const interruptedFinal = this.interruptedRead(identity, client);
-    if (interruptedFinal) return interruptedFinal;
-    if (!this.current(identity)) {
-      if (!this.observedReplacement(identity))
-        return this.retained("unavailable", "AgentVoice observer disconnected. Reconnecting…");
-      this.resetCall();
-      return empty("connecting");
-    }
-    if (this.actionable(identity)) void this.controls.drain();
     const rendered = new Set(order);
     const delegated = new Map<
       string,
@@ -1037,8 +1103,8 @@ export class LiveReader {
         }
       }
     }
-    return {
-      phase: this.sessionPhase(identity),
+    const view: LiveView = {
+      phase,
       id: this.viewId,
       persistenceScope: persistenceScope(identity.workspace, identity.threadId),
       voice: this.voice.messages(),
@@ -1048,14 +1114,16 @@ export class LiveReader {
       }),
       agentHistoryLoading: !this.initialHistorySettled,
       voiceHistoryLoading: this.tail ? !this.tail.initialHistoryLoaded : false,
-      agentControls: this.controlsView(),
-      voiceNotice: voiceNotice ?? this.voice.notice,
+      agentControls,
+      voiceNotice: effectiveVoiceNotice,
       agentNotice:
         this.historyNotice ??
         (live.items.some((entry) => !entry.complete)
           ? "Some live text is incomplete; waiting for the completed item."
           : undefined),
     };
+    this.projection = { stamp, view };
+    return view;
   }
 
   private loadHistoryPage(identity: Identity, params: Record<string, unknown>) {

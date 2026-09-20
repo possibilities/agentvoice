@@ -78,7 +78,9 @@ export function liveApi(
   files: Pick<FilePicker, "list"> = new FilePicker(),
   images: Pick<LocalImageStore, "save" | "discard"> = new LocalImageStore(),
 ) {
-  let liveSnapshot: { json: string; etag: string; gzip?: Buffer<ArrayBufferLike> } | undefined;
+  let liveSnapshot:
+    | { view: LiveView; json: string; etag: string; gzip?: Buffer<ArrayBufferLike> }
+    | undefined;
   return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (!isLocalRequest(request, env)) {
       if (
@@ -354,16 +356,21 @@ export function liveApi(
       .read()
       .then((view) => {
         if (response.destroyed) return;
-        const json = JSON.stringify(view);
-        if (!liveSnapshot || liveSnapshot.json !== json) {
-          const digest = createHash("sha256").update(json).digest("base64url");
-          liveSnapshot = {
-            json,
-            etag: `W/"sha256-${digest}"`,
-            ...(Buffer.byteLength(json) >= liveCompressionThreshold
-              ? { gzip: gzipSync(json, { level: 1 }) }
-              : {}),
-          };
+        // LiveReader preserves object identity only while its verified projection is unchanged.
+        // Keep the prior body and validator without allocating another full transcript string.
+        if (!liveSnapshot || liveSnapshot.view !== view) {
+          const json = JSON.stringify(view);
+          if (!liveSnapshot || liveSnapshot.json !== json) {
+            const digest = createHash("sha256").update(json).digest("base64url");
+            liveSnapshot = {
+              view,
+              json,
+              etag: `W/"sha256-${digest}"`,
+              ...(Buffer.byteLength(json) >= liveCompressionThreshold
+                ? { gzip: gzipSync(json, { level: 1 }) }
+                : {}),
+            };
+          } else liveSnapshot.view = view;
         }
         response.setHeader("ETag", liveSnapshot.etag);
         response.setHeader("Vary", "Accept-Encoding");
