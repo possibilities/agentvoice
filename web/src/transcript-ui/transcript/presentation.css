@@ -90,12 +90,13 @@
 .identity-row {
   --identity-rail-width: 16px;
   --identity-action-width: 28px;
-  --identity-rail-gap: 8px;
+  --identity-rail-gap: 10px;
+  --identity-action-gap: 8px;
   --identity-mark-top: 6px;
   display: grid;
-  grid-template-columns: var(--identity-rail-width) minmax(0, 1fr) var(--identity-action-width);
+  grid-template-columns: var(--identity-rail-width) var(--identity-rail-gap) minmax(0, 1fr) var(--identity-action-gap) var(--identity-action-width);
   align-items: start;
-  column-gap: var(--identity-rail-gap);
+  column-gap: 0;
   padding-inline: 16px;
   box-sizing: border-box;
   width: 100%;
@@ -113,7 +114,10 @@
 .identity-row[data-identity="tool"],
 .identity-row[data-identity="group"] { --identity-mark-top: 10px; }
 .identity-row > * { min-width: 0; }
+/* The reading gap can change without moving the right action or its clearance. */
+.identity-row > :nth-child(2) { grid-column: 3; }
 .identity-row__mark {
+  grid-column: 1;
   display: flex;
   justify-content: center;
   padding-top: var(--identity-mark-top);
@@ -122,6 +126,7 @@
 .identity-row__mark > [role="img"] { display: flex; }
 .identity-row__mark svg { width: 16px; height: 16px; }
 .identity-row__actions {
+  grid-column: 5;
   display: flex;
   justify-content: center;
   align-items: center;

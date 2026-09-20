@@ -179,8 +179,51 @@ for (const width of [1440, 800, 390, 320]) {
     for (const geometry of bulletGeometry) {
       expect(Math.abs(geometry.icon - bulletGeometry[0]!.icon)).toBeLessThanOrEqual(1);
       expect(Math.abs(geometry.text - bulletGeometry[0]!.text)).toBeLessThanOrEqual(1);
-      expect(Math.abs(geometry.gap - 8)).toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.gap - 10)).toBeLessThanOrEqual(1);
     }
+    const optical = await rows.evaluateAll((elements) =>
+      elements.map((row) => {
+        const svg = row.querySelector(".identity-row__mark svg") as SVGSVGElement;
+        const box = svg.getBoundingClientRect();
+        const ink = svg.getBBox();
+        const view = svg.viewBox.baseVal;
+        const sx = box.width / view.width;
+        const sy = box.height / view.height;
+        const body = row.children[1]!.getBoundingClientRect();
+        const actions = row.querySelector(".identity-row__actions")!.getBoundingClientRect();
+        const frame = row.getBoundingClientRect();
+        return {
+          box: [box.width, box.height],
+          ink: [ink.width * sx, ink.height * sy],
+          center: [
+            (ink.x + ink.width / 2 - view.x - view.width / 2) * sx,
+            (ink.y + ink.height / 2 - view.y - view.height / 2) * sy,
+          ],
+          stroke: parseFloat(getComputedStyle(svg).strokeWidth) * sx,
+          actionGap: actions.left - body.right,
+          actionInset: frame.right - actions.right,
+          actionWidth: actions.width,
+          background: getComputedStyle(svg.parentElement!).backgroundColor,
+          border: getComputedStyle(svg.parentElement!).borderTopWidth,
+        };
+      }),
+    );
+    for (const mark of optical) {
+      expect(mark.box).toEqual([16, 16]);
+      for (const size of mark.ink) {
+        expect(size).toBeGreaterThanOrEqual(12);
+        expect(size).toBeLessThanOrEqual(13.34);
+      }
+      for (const offset of mark.center) expect(Math.abs(offset)).toBeLessThanOrEqual(0.5);
+      expect(mark.stroke).toBeCloseTo(4 / 3, 2);
+      expect(mark.actionGap).toBeCloseTo(8, 1);
+      expect(mark.actionInset).toBeCloseTo(16, 1);
+      expect(mark.actionWidth).toBe(width <= 640 ? 44 : 28);
+      expect(mark.background).toBe("rgba(0, 0, 0, 0)");
+      expect(mark.border).toBe("0px");
+    }
+    const inkAreas = optical.map((mark) => mark.ink[0]! * mark.ink[1]!);
+    expect(Math.max(...inkAreas) / Math.min(...inkAreas)).toBeLessThan(1.25);
     const humanSurfaces = await page
       .locator('.identity-row:is([data-identity="human"], [data-identity="voice"])')
       .evaluateAll((elements) =>

@@ -39,6 +39,16 @@ rows. The voice action retains 28/44-pixel desktop/narrow-or-coarse targets insi
 the Human surface. The group disclosure chevron trails its summary so the count
 shares the same text start.
 
+Further live-feedback refinement: the shared identity-to-content gap is ten pixels;
+the independent right-action clearance stays eight pixels. A desktop/mobile
+comparison of ten and twelve pixels chose the smaller relaxation. Agent uses
+BotMessageSquare, typed Human uses CircleUserRound, Human via Voice uses AudioLines,
+and Tool/group retains TerminalSquare. Their similarly proportioned glyphs share
+a sixteen-pixel box and stroke weight, with occupied bounds of twelve to thirteen
+and one-third pixels and centered placement. An alternative subtle square-cell
+treatment introduced extra boundaries and smaller internal marks; identities stay
+unboxed. Accessible names and the existing row surfaces remain unchanged.
+
 Ordered lists also place their decimal marker column at the ordinary prose edge,
 with a hanging text inset sized for the largest marker. Native ordered-list/start
 semantics remain. Unordered-list marker, padding, spacing and wrapping rules stay

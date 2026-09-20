@@ -1,10 +1,15 @@
-import { BotIcon, SpeechIcon, TerminalSquareIcon, UserRoundIcon } from "lucide-react";
+import {
+  AudioLinesIcon,
+  BotMessageSquareIcon,
+  CircleUserRoundIcon,
+  TerminalSquareIcon,
+} from "lucide-react";
 import { type ReactNode, useId } from "react";
 
 const identities = {
-  agent: { icon: BotIcon, name: "Agent" },
-  human: { icon: UserRoundIcon, name: "Human" },
-  voice: { icon: SpeechIcon, name: "Human via Voice" },
+  agent: { icon: BotMessageSquareIcon, name: "Agent" },
+  human: { icon: CircleUserRoundIcon, name: "Human" },
+  voice: { icon: AudioLinesIcon, name: "Human via Voice" },
   tool: { icon: TerminalSquareIcon, name: "Tool" },
   group: { icon: TerminalSquareIcon, name: "Tool activities" },
 };
