@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -10,7 +11,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { VoiceState } from "../src/console/state.ts";
 import { controlStatusSchema } from "../src/control/contract.ts";
@@ -21,6 +22,8 @@ import { lockThread } from "../src/core/thread-lock.ts";
 import type { ControllerEvent } from "../src/events/contract.ts";
 import type { ServerMediaMessage } from "../src/frontend/media-protocol.ts";
 import { parseArgs } from "../src/main.ts";
+import { dataDirectory } from "../src/paths.ts";
+import { adoptRoleFiles, captureFiles, createRole, rolePath } from "../src/roles/store.ts";
 import { type ControllerOptions, RuntimeController } from "../src/runtime-control/controller.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "../src/runtime-control/process.ts";
 import { deferred } from "./fixtures/runtime-harness.ts";
@@ -791,6 +794,133 @@ test("bound role status distinguishes database head freshness from its configure
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("an adopted directory loads on full controller startup while each running role projection stays immutable", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "av-controller-role-restart-")));
+  const workspace = join(root, "work");
+  const source = join(root, "manager");
+  const skill = join(source, "skills", "sample", "SKILL.md");
+  const configPath = join(root, "server.json");
+  mkdirSync(workspace);
+  mkdirSync(join(source, "skills", "sample"), { recursive: true });
+  writeFileSync(join(source, "APPEND_SYSTEM_PROMPT.md"), "manager guidance\n");
+  writeFileSync(skill, "old skill instructions\n");
+  writeFileSync(configPath, JSON.stringify({ role: source }));
+  const previousData = process.env["XDG_DATA_HOME"];
+  const previousCache = process.env["XDG_CACHE_HOME"];
+  process.env["XDG_DATA_HOME"] = join(root, "data");
+  process.env["XDG_CACHE_HOME"] = join(root, "cache");
+  const database = rolePath(dataDirectory(process.env, homedir()), workspace);
+  const initialFiles = captureFiles(source, true);
+  const initialDigests = roleContentFromFiles(initialFiles);
+  const initial = createRole(database, { settings: {}, hasRole: true, files: initialFiles });
+  writeFileSync(skill, "current skill instructions\n");
+  const currentFiles = captureFiles(source, true);
+  const currentDigests = roleContentFromFiles(currentFiles);
+  expect(currentDigests.skills).not.toBe(initialDigests.skills);
+
+  const provenance = {
+    parsed: parseArgs([
+      "--config",
+      configPath,
+      "--workspace",
+      workspace,
+      "--codex",
+      join(import.meta.dir, "fixtures/controller-codex.ts"),
+    ]),
+    options: { debug: false },
+    launchCwd: root,
+  };
+  const makeController = (instanceId: string) =>
+    new RuntimeController({
+      instanceId,
+      stateDir: join(root, "state"),
+      provenance,
+      version: "test",
+      control: registration,
+      frontendAttached: false,
+    });
+  const audit = () =>
+    readFileSync(join(workspace, "native-audit.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { method: string; params: Record<string, unknown> });
+  const projectedSkills = () =>
+    audit()
+      .filter((entry) => entry.method === "skills/extraRoots/set")
+      .map((entry) => (entry.params["extraRoots"] as string[])[0]!);
+
+  const first = makeController("role-before-adoption");
+  let second: RuntimeController | undefined;
+  try {
+    await first.start();
+    expect(first.status().role).toMatchObject({
+      loaded: { id: initial.id, revision: 1 },
+      desired: { id: initial.id, revision: 1 },
+      adoptionSource: {
+        loaded: { generation: 1, revision: 1, digests: initialDigests },
+        current: { digests: currentDigests },
+        stale: true,
+      },
+    });
+    const firstProjection = projectedSkills().at(-1)!;
+    expect(readFileSync(join(firstProjection, "sample", "SKILL.md"), "utf8")).toBe(
+      "old skill instructions\n",
+    );
+
+    const adopted = adoptRoleFiles(database, initial.id, 1, currentFiles);
+    expect(adopted).toEqual({ id: initial.id, revision: 2 });
+    expect(first.status().role).toMatchObject({
+      loaded: { id: initial.id, revision: 1 },
+      desired: { id: initial.id, revision: 2 },
+      adoptionSource: {
+        loaded: { generation: 1, revision: 1, digests: initialDigests },
+        current: { digests: currentDigests },
+        stale: true,
+      },
+    });
+    expect(readFileSync(join(firstProjection, "sample", "SKILL.md"), "utf8")).toBe(
+      "old skill instructions\n",
+    );
+
+    await first.shutdown();
+    expect(existsSync(firstProjection)).toBe(false);
+    second = makeController("role-after-adoption");
+    await second.start();
+    expect(second.status().role).toMatchObject({
+      loaded: { id: initial.id, revision: 2 },
+      desired: { id: initial.id, revision: 2 },
+      adoptionSource: {
+        loaded: { generation: 1, revision: 2, digests: currentDigests },
+        current: { digests: currentDigests },
+        stale: false,
+      },
+    });
+    const secondProjection = projectedSkills().at(-1)!;
+    expect(secondProjection).not.toBe(firstProjection);
+    expect(readFileSync(join(secondProjection, "sample", "SKILL.md"), "utf8")).toBe(
+      "current skill instructions\n",
+    );
+
+    writeFileSync(skill, "newer skill instructions\n");
+    expect(second.status().role).toMatchObject({
+      loaded: { id: initial.id, revision: 2 },
+      desired: { id: initial.id, revision: 2 },
+      adoptionSource: { loaded: { digests: currentDigests }, stale: true },
+    });
+    expect(readFileSync(join(secondProjection, "sample", "SKILL.md"), "utf8")).toBe(
+      "current skill instructions\n",
+    );
+  } finally {
+    await Promise.allSettled([first.shutdown(), second?.shutdown() ?? Promise.resolve()]);
+    if (previousData === undefined) delete process.env["XDG_DATA_HOME"];
+    else process.env["XDG_DATA_HOME"] = previousData;
+    if (previousCache === undefined) delete process.env["XDG_CACHE_HOME"];
+    else process.env["XDG_CACHE_HOME"] = previousCache;
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test("controller reaps captured detached process sessions after the runtime dies during shutdown", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "av-runtime-detached-")));
