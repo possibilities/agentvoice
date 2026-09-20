@@ -54,14 +54,13 @@ test("raw paste materializes local files, persists atomic image paths and sends 
   await expect(attachments.getByText("[Image #2]", { exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/clipboard-images-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Agent", exact: true }).click();
   await page.screenshot({ path: "test-results/clipboard-images-mobile.png", fullPage: true });
   await page.setViewportSize({ width: 844, height: 390 });
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeInViewport();
+  await expect(input).toBeInViewport();
   await page.screenshot({ path: "test-results/clipboard-images-landscape.png", fullPage: true });
   await attachments.getByRole("button", { name: "Remove Image #1" }).click();
   await expect(attachments.getByText("[Image #2]", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await input.press("Enter");
   await expect.poll(() => commands.length).toBe(1);
   expect(commands[0]).toMatchObject({ action: "send", text: "", images: [{ path: imagePath(2) }] });
   expect(Object.keys(commands[0]!).sort()).toEqual([
@@ -75,7 +74,7 @@ test("raw paste materializes local files, persists atomic image paths and sends 
   await expect(attachments).toHaveCount(0);
 });
 
-test("image failures retain draft, newer image drafts survive rejected submissions and queue editing preserves images", async ({
+test("image failures retain draft and newer image drafts survive rejected automatic steering", async ({
   page,
 }) => {
   const state = view();
@@ -94,17 +93,6 @@ test("image failures retain draft, newer image drafts survive rejected submissio
       await new Promise((resolve) => setTimeout(resolve, 250));
       return route.fulfill({ status: 409, json: { error: "Codex rejected this message." } });
     }
-    if (command.action === "queue")
-      state.agentControls!.queue.push({
-        id: command.requestId,
-        text: command.text,
-        images: command.images,
-        canSteer: true,
-        canResume: false,
-        disabled: false,
-      });
-    if (command.action === "edit")
-      Object.assign(state.agentControls!.queue[0]!, { text: command.text, images: command.images });
     return route.fulfill({ json: { ok: true } });
   });
   await page.goto("/");
@@ -112,7 +100,7 @@ test("image failures retain draft, newer image drafts survive rejected submissio
   await input.fill("First image");
   await pasteImage(page);
   await expect(page.getByRole("list", { name: "Attached images" })).toBeVisible();
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await input.press("Enter");
   await input.fill("Newer draft");
   await pasteImage(page);
   await expect(page.getByRole("button", { name: "Restore sent message" })).toBeVisible();
@@ -122,29 +110,14 @@ test("image failures retain draft, newer image drafts survive rejected submissio
     page.getByRole("list", { name: "Attached images" }).getByText("[Image #2]", { exact: true }),
   ).toBeVisible();
   reject = false;
-  await page.getByRole("button", { name: "Follow-up behavior" }).click();
-  await page.getByRole("menuitemradio", { name: "Queue for next turn" }).click();
-  await page.getByRole("button", { name: "Send", exact: true }).click();
-  const queue = page.getByRole("region", { name: "Queued messages" });
-  await expect(queue.getByText("[Image #2]", { exact: true })).toBeVisible();
-  await input.fill("Saved draft");
-  await pasteImage(page);
-  await expect(page.getByRole("list", { name: "Attached images" })).toBeVisible();
-  await queue.getByRole("button", { name: "Edit", exact: true }).click();
-  await page
-    .getByRole("list", { name: "Attached images" })
-    .getByRole("button", { name: "Remove Image #1" })
-    .click();
-  await page.getByRole("textbox", { name: "Edit queued message" }).fill("Edited queue");
-  await page.getByRole("button", { name: "Save queued message" }).click();
-  await expect(input).toHaveValue("Saved draft");
-  await expect(page.getByRole("list", { name: "Attached images" }).locator("li")).toHaveAttribute(
-    "title",
-    imagePath(3),
-  );
-  expect(commands.find((command) => command.action === "edit")?.images).toEqual([
-    { path: imagePath(1) },
-  ]);
+  await input.press("Enter");
+  await expect.poll(() => commands.length).toBe(2);
+  expect(commands[1]).toMatchObject({
+    action: "steer",
+    text: "Newer draft\n\nFirst image",
+    images: [{ path: imagePath(2) }, { path: imagePath(1) }],
+  });
+  expect(commands.some((command) => command.action === "queue")).toBe(false);
 });
 
 test("save errors, type/size limits and cancellation do not submit a message or lose text", async ({
@@ -174,7 +147,9 @@ test("save errors, type/size limits and cancellation do not submit a message or 
   await expect(page.getByRole("alert")).toContainText("Clipboard image is invalid");
   pending = true;
   await pasteImage(page);
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toHaveCount(0);
+  await input.press("Enter");
+  await expect(input).toHaveValue("Keep text");
   await page.getByRole("button", { name: "Cancel paste" }).click();
   await expect(page.getByRole("alert")).toContainText("cancelled");
   await expect(input).toHaveValue("Keep text");
@@ -203,21 +178,28 @@ test("image-only uncertain delivery survives reload and reconciles by native cli
   await page.goto("/");
   await pasteImage(page);
   await expect(page.getByRole("list", { name: "Attached images" })).toBeVisible();
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByRole("textbox", { name: "Message Agent", exact: true }).press("Enter");
+  const optimistic = page.locator('.chat-transcript [data-role="user"]');
+  await expect(optimistic.getByText("1 image attached", { exact: true })).toBeVisible();
+  await expect(optimistic.getByText("[Image #1]", { exact: true })).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "Message Agent", exact: true })
     .fill("Independent next draft");
+  await expect(page.getByRole("button", { name: "Restore sent message" })).toBeVisible();
+  await expect(optimistic).toContainText("Delivery unknown · check before resending");
+  state.agent.push({
+    id: `client:${requestId}`,
+    role: "user",
+    content: "[Image #1]",
+    status: "streaming",
+  });
+  await expect(optimistic.getByText("1 image attached", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore sent message" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("button", { name: "Restore sent message" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Message images" })).toContainText("[Image #1]");
   expect(submissions).toBe(1);
-  state.agent.push({
-    id: `client:${requestId}`,
-    role: "user",
-    content: "[Image #1]",
-    status: "complete",
-  });
+  state.agent[0]!.status = "complete";
   await expect(page.getByRole("button", { name: "Restore sent message" })).toHaveCount(0);
   expect(submissions).toBe(1);
 });

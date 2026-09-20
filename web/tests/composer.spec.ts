@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { LiveView } from "../src/types.ts";
 
-test("Agent-only shared composer sends, steers, queues and edits without a Stop control through the host API", async ({
+test("keyboard submission sends while idle, steers while active, and never creates a queue", async ({
   page,
 }) => {
   const view: LiveView = {
@@ -10,92 +10,79 @@ test("Agent-only shared composer sends, steers, queues and edits without a Stop 
     id: "89e68874-f742-45c9-bd32-98123e74b164",
     voice: [],
     agent: [],
-    agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
+    agentControls: {
+      available: true,
+      active: false,
+      pending: false,
+      stopping: false,
+      queue: [
+        {
+          id: "existing-queue",
+          text: "Already queued by an older client",
+          pausedReason: "Waiting for the current turn",
+          canSteer: true,
+          canResume: true,
+          disabled: false,
+        },
+      ],
+    },
   };
-  const controls = view.agentControls!;
   const requests: Record<string, unknown>[] = [];
-  let reject = true;
   await page.route("**/api/live", (route) => route.fulfill({ json: view }));
   await page.route("**/api/agent", (route) => {
     const command = route.request().postDataJSON();
     requests.push(command);
-    if (reject)
-      return route.fulfill({ status: 409, json: { error: "Codex rejected the request." } });
-    if (command.action === "send") controls.active = true;
-    if (command.action === "queue")
-      controls.queue.push({
-        id: command.requestId,
-        text: command.text,
-        canSteer: true,
-        canResume: false,
-        disabled: false,
-      });
-    if (command.action === "edit") controls.queue[0]!.text = command.text;
-    if (command.action === "remove") controls.queue = [];
+    if (command.action === "send") view.agentControls!.active = true;
+    if (command.action === "remove") view.agentControls!.queue = [];
     return route.fulfill({ json: { ok: true } });
   });
   await page.goto("/");
+
   const agent = page.getByRole("region", { name: "Agent", exact: true });
-  const voice = page.getByRole("region", { name: "Voice", exact: true });
   const input = agent.getByRole("textbox", { name: "Message Agent" });
-  await expect(voice.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Follow-up behavior" })).toHaveCount(0);
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reference a file" })).toHaveCount(0);
   await expect(input).toHaveAttribute("aria-autocomplete", "none");
   await expect(input).toHaveAttribute("autocapitalize", "off");
   await expect(input).toHaveAttribute("autocomplete", "off");
   await expect(input).toHaveAttribute("autocorrect", "off");
   await expect(input).toHaveAttribute("spellcheck", "false");
+
   await input.fill("Typed request");
-  await agent.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(agent.getByRole("alert")).toHaveText("Codex rejected the request.");
-  await expect(input).toHaveValue("Typed request");
-  reject = false;
-  await agent.getByRole("button", { name: "Send", exact: true }).click();
+  await input.press("Shift+Enter");
+  await expect(input).toHaveValue("Typed request\n");
+  expect(requests).toHaveLength(0);
+  await input.press("Enter");
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]?.action).toBe("send");
   await expect(input).toHaveValue("");
-  await expect(agent.getByRole("button", { name: "Stop Agent" })).toHaveCount(0);
-  await expect(agent.locator(".transcript-composer__activity-line")).toHaveAttribute(
+
+  await expect(page.locator(".transcript-composer__activity-line")).toHaveAttribute(
     "data-active",
     "true",
   );
+  await expect(page.locator(".transcript-composer__status")).toHaveCount(0);
   await input.fill("Adjust direction");
-  await agent.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(input).toHaveValue("");
-  await agent.getByRole("button", { name: "Follow-up behavior" }).click();
-  await page.getByRole("menuitemradio", { name: "Queue for next turn" }).click();
-  await input.fill("Work later");
-  await agent.getByRole("button", { name: "Send", exact: true }).click();
+  await input.press("Enter");
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]?.action).toBe("steer");
+  expect(requests.some((request) => request.action === "queue")).toBe(false);
+
   const queue = agent.getByRole("region", { name: "Queued messages" });
-  await expect(queue.getByText("Work later", { exact: true })).toBeVisible();
-  await queue.getByRole("button", { name: "Edit", exact: true }).click();
-  const editInput = agent.getByRole("textbox", { name: "Edit queued message" });
-  await expect(editInput).toHaveValue("Work later");
-  await editInput.fill("Edited follow-up");
-  await agent.getByRole("button", { name: "Save queued message" }).click();
-  await expect(queue.getByText("Edited follow-up", { exact: true })).toBeVisible();
-  controls.active = false;
-  controls.stopping = false;
-  await expect(input).not.toHaveAttribute("readonly");
-  await page.screenshot({ path: "test-results/agent-composer.png", fullPage: true });
+  await expect(queue.getByText("Already queued by an older client", { exact: true })).toBeVisible();
+  await expect(queue.getByText("Waiting for the current turn", { exact: true })).toBeVisible();
+  await expect(queue.getByRole("button")).toHaveCount(1);
+  await expect(queue.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
   await queue.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect.poll(() => requests.length).toBe(3);
+  expect(requests[2]?.action).toBe("remove");
   await expect(queue).toHaveCount(0);
-  expect(requests.map((row) => row.action)).toEqual([
-    "send",
-    "send",
-    "steer",
-    "queue",
-    "editing",
-    "edit",
-    "editing",
-    "remove",
-  ]);
-  expect(requests.every((row) => row.viewId === view.id && typeof row.requestId === "string")).toBe(
-    true,
-  );
-  expect(new Set(requests.map((row) => row.requestId)).size).toBe(requests.length);
-  expect(view.agent).toEqual([]);
-  await input.fill("Draft for old call");
-  view.id = "a4ce8004-c370-42a5-a833-b7ce64cece66";
-  view.persistenceScope = "replacement-composer-workspace-thread";
-  await expect(input).toHaveValue("");
-  await page.setViewportSize({ width: 600, height: 600 });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(input).toBeVisible();
+  await input.focus();
+  await expect(input).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

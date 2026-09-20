@@ -6,16 +6,18 @@ overview and current readiness caveat, see the [README](../README.md).
 A local Codex voice server with terminal and same-device browser frontends.
 `agentvoice server` restores saved work or waits for a first frontend. Bare
 `agentvoice` prints command help. `agentvoice client` is the explicit pointer voice
-frontend. The AgentVoice web UI at `https://agentvoice.localhost` presents the
-persistent Agent and Voice transcripts and accepts typed Agent input. The terminal
+frontend. The AgentVoice web UI at `https://agentvoice.localhost` presents one
+persistent Agent transcript and accepts keyboard-submitted Agent input. Projected
+voice handoffs remain visible there as `Via Voice` Human messages. The terminal
 client owns native audio and WebRTC, and displays connection status and monochrome YOU/AGENT
 buttons, plus PUSH TO TALK when the microphone is muted. `agentvoice phone`
 instead opens a capability-bearing loopback page whose browser owns audio and
 WebRTC. In both topologies the server owns exact conversation identity, thread
 leases and its unmodified `codex app-server` child.
 
-Persistent voice records are read by the web Voice lane with exact workspace and
-thread identity checks. The web Agent composer uses the guarded host-side gateway;
+Persistent voice records retain exact workspace and thread identity checks and
+remain available through server contracts, without a raw Voice lane in the web UI.
+The web Agent composer uses the guarded host-side gateway;
 native sockets and credentials never enter browser code.
 
 The direction is vanilla Codex with configurable prompts and settings: the
@@ -74,8 +76,8 @@ microphone permission only after **Start voice** is tapped, then owns microphone
 capture, response playback, codecs and the WebRTC peer. It provides microphone
 and speaker mute plus hold-to-talk while persistently muted. The Termux process
 continues to own the call controller, configuration, exact thread, transcripts,
-gateway and stock Codex child. Use the desktop AgentVoice web UI for Agent and
-Voice transcripts and typed Agent input.
+gateway and stock Codex child. Use the desktop AgentVoice web UI for the Agent
+transcript and keyboard-submitted Agent input; projected voice handoffs appear there.
 
 The printed URL contains a per-process bearer capability. Do not share or
 bookmark it. The listener accepts only exact-origin loopback requests and one
@@ -223,7 +225,7 @@ reports native thread state and runtime availability during a call, including
 native subagents. The same endpoint also carries typed
 `voice.*` items and transcript deltas as a live-only socket stream, without history
 backfill. The controller automatically saves private workspace/thread JSONL; the
-web Voice lane reads it live or after a call ends. An explicit `bun run voice:record
+web server can read it live or after a call ends. An explicit `bun run voice:record
 --workspace <dir> --out-dir <dir>` observer saves per-conversation JSONL for outside
 tools. `state.get` remains lifecycle-only. See the
 [event protocol](events.md) for prefix matching, snapshots, and limits, and

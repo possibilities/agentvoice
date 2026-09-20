@@ -1,5 +1,7 @@
 # 0064: Browser presentation preferences
 
+Status: Superseded by [ADR 0102](0102-agent-only-web-transcript.md).
+
 Accepted 2026-09-14 at the operator's request.
 
 The transcript reader offers Agent, Voice, and Both views; Both remains the

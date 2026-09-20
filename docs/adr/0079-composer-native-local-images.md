@@ -1,6 +1,7 @@
 # 0079: Clipboard images use native local-image input
 
-Status: Accepted
+Status: Accepted; [0102](0102-agent-only-web-transcript.md) removes the picker and
+visible submit/mode controls while retaining clipboard image behavior.
 
 Partially supersedes [0078](0078-composer-local-file-references.md): ordinary file
 references remain editable text; raw clipboard bitmap paste now has its own local

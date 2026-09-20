@@ -3,7 +3,7 @@ import { parseCodexMessagePresentation } from "../src/transcript-ui/transcript/c
 import type { LiveView } from "../src/types.ts";
 
 for (const width of [1440, 390]) {
-  test(`unified header and voice details remain readable, mono and keyboard accessible at ${width}px`, async ({
+  test(`headerless voice details remain readable, mono and keyboard accessible at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -33,57 +33,31 @@ for (const width of [1440, 390]) {
       return route.fulfill({ status: 403, json: { error: "Fixture blocks native actions" } });
     });
     await page.goto("/");
-    const header = page.locator(".app-header");
-    const modes = page.getByRole("group", { name: "Transcript view" });
-    await expect(header.getByRole("heading", { name: "AgentVoice" })).toBeVisible();
-    await expect(header.getByText(/Agent \+ Voice chat|Agent chat|Voice chat/)).toHaveCount(0);
-    await expect(page.locator(".lane h1, .lane h2")).toHaveCount(0);
+    await expect(page.locator("header.app-header, .app-brand, .app-status")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "AgentVoice" })).toHaveCount(0);
+    await expect(page.getByRole("group", { name: "Transcript view" })).toHaveCount(0);
+    const lane = page.getByRole("region", { name: "Agent", exact: true });
+    expect((await lane.boundingBox())!.y).toBe(0);
     const input = page.getByRole("textbox", { name: "Message Agent" });
     await input.fill("Retained polish draft");
-    const headerHeight = (await header.boundingBox())!.height;
+
     view.phase = "detached";
-    const status = header.getByRole("status");
-    await expect(status).toHaveText("");
-    await expect(status).not.toHaveAttribute("data-visible");
+    await expect(page.locator(".transcript-status")).toHaveCount(0);
     view.phase = "unavailable";
+    const status = page.locator(".transcript-status");
     await expect(status).toContainText("Agent transcript is reconnecting…");
-    await expect(status).toHaveAttribute("data-visible", "true");
     await expect(status).toHaveCSS("text-align", "center");
     await expect(status).toHaveCSS("border-radius", "0px");
-    const headerBox = (await header.boundingBox())!;
-    const statusBox = (await status.boundingBox())!;
-    expect(
-      Math.abs(statusBox.x + statusBox.width / 2 - (headerBox.x + headerBox.width / 2)),
-    ).toBeLessThan(1);
-    expect((await header.boundingBox())!.height).toBeGreaterThanOrEqual(headerHeight);
-    for (const label of ["Voice", "Agent", "Both"]) {
-      const button = modes.getByRole("button", { name: label, exact: true });
-      await button.focus();
-      await page.keyboard.press("Space");
-      await expect(button).toHaveAttribute("aria-pressed", "true");
-      await expect(header.getByText(`${label} chat`, { exact: true })).toHaveCount(0);
-    }
-    const headerBottom = (await header.boundingBox())!.y + (await header.boundingBox())!.height;
-    for (const lane of ["Agent", "Voice"]) {
-      expect(
-        (await page.getByRole("region", { name: lane, exact: true }).boundingBox())!.y,
-      ).toBeGreaterThanOrEqual(headerBottom);
-    }
+    await expect(page.locator("header")).toHaveCount(0);
+
+    const voiceSource = page.getByRole("img", { name: "Via Voice", exact: true });
+    await expect(voiceSource).toBeVisible();
+    await expect(voiceSource).not.toHaveAttribute("title");
     const inspect = page.getByRole("button", { name: "Inspect voice message" });
-    const inset = await inspect.evaluate((el) => {
-      const icon = el.getBoundingClientRect();
-      const card = el.closest(".voice-message")!.getBoundingClientRect();
-      return { top: icon.top - card.top, right: card.right - icon.right };
-    });
-    expect(inset.top).toBeGreaterThanOrEqual(8);
-    expect(inset.right).toBeGreaterThanOrEqual(8);
-    await page.screenshot({ path: `test-results/polish-header-${width}.png` });
+    await page.screenshot({ path: `test-results/polish-headerless-${width}.png` });
     await inspect.click();
     const dialog = page.getByRole("dialog", { name: "Voice message details" });
     await expect(dialog).toHaveCSS("border-radius", "0px");
-    await expect(
-      dialog.getByText("Compare the displayed handoff with its voice context and source."),
-    ).toHaveCount(0);
     const sans = await page.evaluate(() =>
       [...document.body.querySelectorAll<HTMLElement>("*")]
         .filter(

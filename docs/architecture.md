@@ -297,8 +297,10 @@ replacement, and closes after runtime teardown. Preserve canonical completions
 through IPC soft pressure and reject foreign/stale runtime events before storage.
 Disk errors must be visible without stopping healthy media; never report missing
 or interrupted speech as complete, replay it, or write it to native history.
-The web Voice lane opens one verified recording inode, enforces workspace/thread
+The web reader opens one verified recording inode, enforces workspace/thread
 headers and bounded records, and never follows file replacement or truncation.
+That compatible server projection remains available even though the web UI no
+longer renders a raw Voice lane.
 The LaunchAgent label is `io.arthack.agentvoice.server`; explicit installation
 retires only the ownership-verified former `dev.agentvoice.default` job.
 

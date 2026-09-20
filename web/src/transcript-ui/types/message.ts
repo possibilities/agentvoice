@@ -34,6 +34,8 @@ export interface Message {
   status: MessageStatus;
   /** Host-owned delivery text for optimistic Human input; omit after reconciliation. */
   deliveryStatus?: string;
+  /** Host-owned count for optimistic local images; canonical content remains source-exact. */
+  pendingImageCount?: number;
   toolActivity?: ToolActivity;
   fileChanges?: FileChange[];
   /** Optional plain-text presentation; content remains the original record. */

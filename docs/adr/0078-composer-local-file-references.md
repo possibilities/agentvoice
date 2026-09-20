@@ -1,6 +1,8 @@
 # 0078: Composer file references remain editable text
 
-Status: Accepted; raw clipboard bitmap limitation superseded by [0079](0079-composer-native-local-images.md).
+Status: Partially superseded; [0102](0102-agent-only-web-transcript.md) removes the
+picker UI while retaining path paste/drop and server contracts. The raw clipboard
+bitmap limitation was superseded by [0079](0079-composer-native-local-images.md).
 
 ## Context
 

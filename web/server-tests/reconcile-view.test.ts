@@ -56,7 +56,7 @@ test("reorders, removals and nested authoritative corrections are retained", () 
   expect(reconcileView(prior, { ...next, agent: [] }).agent).toEqual([]);
 });
 
-test("the first nonempty same-incarnation batch bypasses deferred empty history", () => {
+test("the first Agent batch bypasses deferred history without following raw Voice readiness", () => {
   const empty: LiveView = {
     id: "view",
     phase: "detached",
@@ -68,6 +68,15 @@ test("the first nonempty same-incarnation batch bypasses deferred empty history"
     agent: [{ id: "history", role: "assistant", content: "Prior work", status: "complete" }],
   };
   expect(transcriptPresentationView(populated, empty)).toBe(populated);
+  expect(
+    transcriptPresentationView(
+      {
+        ...empty,
+        voice: [{ id: "speech", role: "user", content: "Raw speech", status: "complete" }],
+      },
+      empty,
+    ),
+  ).toBe(empty);
 
   const later: LiveView = {
     ...populated,
@@ -77,6 +86,8 @@ test("the first nonempty same-incarnation batch bypasses deferred empty history"
     ],
   };
   expect(transcriptPresentationView(later, populated)).toBe(populated);
+  const voiceStillLoading = { ...populated, voiceHistoryLoading: true };
+  expect(transcriptPresentationView(later, voiceStillLoading)).toBe(voiceStillLoading);
   expect(transcriptPresentationView({ ...empty, id: "replacement" }, populated).id).toBe(
     "replacement",
   );

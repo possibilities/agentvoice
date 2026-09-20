@@ -103,7 +103,7 @@ the landing branch before assigning it and coordinate shared ADR edits. Cite
 complete relative file links; a title change must not redirect a citation to a
 different decision. Keep this navigation index and the record's status together.
 
-- [0064: Browser presentation preferences](0064-browser-presentation-preferences.md)
+- [0064: Browser presentation preferences](0064-browser-presentation-preferences.md) — superseded by [0102](0102-agent-only-web-transcript.md).
 
 - [0065: Explicit server lifecycle controls in the native menu](0065-native-menu-server-lifecycle.md)
 
@@ -163,3 +163,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0100: Export authoritative current-turn timing](0100-export-authoritative-turn-timing.md) — accepted; event protocol 3 and `threads --json` version 4 carry optional native start and terminal timestamps without observation-time guesses.
 
 - [0101: Export requested exact historical turn metadata](0101-export-exact-bound-turn-timing.md) — accepted; v5 adds bounded metadata-only lookups for exact root/thread/turn targets.
+
+- [0102: Present one Agent transcript in the web UI](0102-agent-only-web-transcript.md) — accepted; a headerless Agent stream and keyboard composer replace pane preferences, raw Voice rendering, and visible send/mode/picker controls while retaining projected voice handoffs and server data.

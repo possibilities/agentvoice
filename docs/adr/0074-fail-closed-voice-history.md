@@ -1,5 +1,8 @@
 # 0074: Keep historical speech outside realtime input
 
+The read-only Voice-lane presentation described below was removed by
+[ADR 0102](0102-agent-only-web-transcript.md); recording and replay boundaries remain.
+
 Accepted 2026-09-15. Supersedes [0066](0066-same-thread-voice-continuity.md).
 
 ## Problem and decision

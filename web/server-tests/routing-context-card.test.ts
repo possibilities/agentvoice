@@ -110,9 +110,7 @@ test("rolls refreshes into one stable block until authored conversation resumes"
     ["routing-context", third.id],
   ]);
   expect(
-    blocks[0]?.kind === "routing-context"
-      ? blocks[0].messages.map((message) => message.id)
-      : [],
+    blocks[0]?.kind === "routing-context" ? blocks[0].messages.map((message) => message.id) : [],
   ).toEqual([first.id, second.id]);
   expect(blocks[3]?.kind === "routing-context" ? blocks[3].context.current?.model : undefined).toBe(
     "gpt-5.6-terra",

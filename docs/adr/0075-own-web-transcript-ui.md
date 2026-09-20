@@ -41,7 +41,8 @@ Transcript fixes, dependencies, tests and releases now move with AgentVoice. The
 repository keeps focused data-helper and direct-component fixtures in addition to
 the host integration suite. The 2,000-row bound, disclosure state, exact settled
 row sizing, host-style isolation, composer recovery, document reading, and current
-AgentVoice lane/dock behavior remain regression requirements.
+Agent-only transcript/dock behavior remain regression requirements. [ADR 0102](0102-agent-only-web-transcript.md)
+removes the raw Voice lane and pane preferences.
 
 AgentChats retires its web reader and transcript package while retaining its CLI,
 index, MCP, and OpenTUI surfaces. Future sharing requires a new explicit product

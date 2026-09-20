@@ -2,7 +2,9 @@
 
 The Agent composer is owned with the transcript UI inside AgentVoice. AgentVoice owns its transport and
 queue, submitting explicit human text through the existing attachment bootstrap
-and gateway. Reading transcripts never submits work. Voice has no composer.
+and gateway. Reading transcripts never submits work. [ADR 0102](adr/0102-agent-only-web-transcript.md)
+defines the current headerless, keyboard-only web presentation; server queue and
+file-list contracts described here remain compatible even where their controls are absent.
 
 ## Native and desktop evidence
 
@@ -33,16 +35,17 @@ one native mutation it checks call and turn identity again. It never sends model
 permissions, cwd or other launch overrides, reads, descendant navigation, or
 answers to native prompts. AgentVoice reports native approvals but does not answer them.
 
-The browser always shows Send, disabled when input is empty or submission is
-unavailable. The follow-up selector chooses Steer or Queue while Agent works.
+The browser shows no Send button or follow-up selector. Enter sends while idle,
+Enter steers while Agent works, and Shift+Enter inserts a line break. Unavailable
+submission leaves the draft editable and ignores Enter.
 A fixed full-width divider above the composer indicates work, with a still
 reduced-motion state and no Working label or reserved text padding. No Stop control is shown; the host API retains interrupt support and
 its lifecycle below.
 
-Queue draining requires confirmed idle state and dispatches one row at a time.
-Rows keep their FIFO position during editing; the shared component awaits a host
-hold before restoring text and awaits release after save/cancel. A page lost
-during editing leaves a visible held row that can be explicitly resumed.
+Queue draining remains a server contract for compatible clients and dispatches one
+row at a time after confirmed idle state. The current web page cannot create, edit,
+resume, or steer a queue row; it displays authoritative queued text, images, pause
+reason, and disabled state, and offers removal.
 Stop pauses queued rows before interrupt dispatch. Its acknowledgment does not
 mean completion: the authoritative terminal turn event clears stopping. Stop
 targets the root Agent turn; it does not end voice media or implement the desktop
@@ -73,9 +76,13 @@ They start no audio, inference, call service or account flow.
 
 ## Optimistic display and reconciliation
 
-Send and Steer add a browser-local Human row before HTTP acknowledgment, marked
-Sending or Steering. Queue adds a disabled local queue row immediately, without
-claiming native submission. Accepted requests remain marked until observed.
+Keyboard Send and Steer add a browser-local Human row before HTTP acknowledgment,
+marked Sending or Steering. The current web page never adds a queued row. Accepted
+requests remain marked until a completed exact client identity is observed. A
+streaming native echo keeps that one local row and its exact submitted Markdown;
+it cannot expose partial overlap. Optimistic images use a readable attachment count
+instead of canonical `[Image #N]` text. Unknown delivery and attachment recovery
+remain visible until the same completed identity arrives.
 The HTTP request UUID is passed as native `clientUserMessageId`; a queued row
 uses that UUID for its first dispatch. Editing gives the next dispatch a fresh
 client identity while preserving the queue row and its position, so explicit
@@ -142,18 +149,13 @@ See [ADR 0062](adr/0062-web-text-interaction-without-voice-attachment.md).
 
 ## Local file references
 
-**Reference a file** opens a bounded picker for visible files in the AgentVoice
-reader host's home folder. Selecting a file inserts `@/absolute/path/to/file` into
-the draft at the selection. The reference stays fully editable, including its
-filename and spaces. Send, Steer, Queue and queued editing send that exact text
-through the unchanged native text input contract; choosing a file sends no turn.
-Cancel and picker errors leave the draft intact.
-
-Drop or paste absolute path text or local `file://` URIs into the composer for the
-same result. If a browser exposes only a filename, use the picker or copy the full
-path. Ordinary selected/dropped files are never copied or saved by these controls.
-A phone browser's
-picker selects files on the Agent host, not files on the phone.
+Drop or paste absolute path text or local `file://` URIs into the composer to insert
+`@/absolute/path/to/file` at the selection. The reference stays fully editable,
+including its filename and spaces, and keyboard Send/Steer sends that exact text
+through the unchanged native text input contract. If a browser exposes only a
+filename, the page explains that a full path is required. Ordinary dropped files
+are never copied or saved by this path-insertion behavior. The file-picker UI and
+its activator are removed.
 
 The host endpoint `POST /api/files` returns directory metadata only. It requires
 the existing loopback peer and exact same-origin JSON guards, does not cache
@@ -166,8 +168,8 @@ file access remains subject to native Codex permissions. See
 
 Paste a PNG, JPEG, WebP or GIF bitmap to attach it as `[Image #N]`. Up to four
 images, each at most 10 MiB, can accompany a message; image-only messages work.
-Remove a numbered attachment with its labeled remove button. Send, Steer, Queue,
-queue editing, saved drafts and failed-send recovery retain the attachment order.
+Remove a numbered attachment with its labeled remove button. Keyboard Send/Steer,
+saved drafts and failed-send recovery retain the attachment order.
 Saving disables submission until it finishes; **Cancel paste** preserves text and
 any images already attached. A save error leaves the draft available.
 

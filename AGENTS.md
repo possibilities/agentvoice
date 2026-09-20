@@ -5,8 +5,10 @@ A local Codex voice server with a pointer-only TUI and same-device phone browser
 waits on a private workspace socket without opening audio. When the selected workspace
 already has a session marker it immediately restores that native conversation while
 detached; otherwise `agentvoice client` connects and starts the new workspace session.
-Bare `agentvoice` prints command help. The AgentVoice web UI presents Agent and Voice
-transcripts and sends typed Agent input through the guarded local gateway.
+Bare `agentvoice` prints command help. The AgentVoice web UI presents one Agent
+transcript and sends keyboard-submitted Agent input through the guarded local gateway.
+Voice handoffs remain projected into that Agent stream; raw Voice recordings stay
+server-owned and are not rendered as a separate lane.
 `agentvoice phone` serves one capability-bearing loopback page; its browser owns
 audio and WebRTC while Termux retains the controller and Codex child.
 The server-owned workspace-session controller retains exact thread

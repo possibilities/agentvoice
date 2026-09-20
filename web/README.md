@@ -1,20 +1,20 @@
-# Live Agent | Voice transcripts
+# Live Agent transcript
 
 `agentvoice serve` opens a live web view at **https://agentvoice.localhost**.
-Two equal, full-height lanes put Agent on the left and Voice on the right. They use
-the AgentVoice-owned transcript UI with Human / Agent labels, Markdown and inline tool/diff
-disclosures. There is no toolbar or call control.
-The Agent lane includes the shared composer with an always-visible Send
-button and Steer / Queue choices while Agent is working. Clipboard images become
+One full-height Agent transcript uses the AgentVoice-owned UI with Human / Agent
+labels, Markdown and inline tool/diff disclosures. There is no page header, toolbar,
+pane selector, raw Voice lane, or call control. Native voice handoffs remain readable
+as `Via Voice` Human cards with an accessible microphone marker and details dialog.
+The composer has no visible Send button or follow-up selector: Enter sends while idle,
+Enter steers while Agent is working, and Shift+Enter inserts a new line. Clipboard images become
 numbered removable local-image attachments (four per message, 10 MiB each); ordinary
-file selection/drop remains editable `@path` text. Image-only input works. The
+path paste/drop remains editable `@path` text. Image-only input works. The
 local save endpoint retains private files in workspace/thread-owned storage, while
-composer controls and native input carry paths only. See [image and file input](../docs/web-agent-input.md#clipboard-images)
-for storage lifecycle and failure behavior. Send is disabled when
-its action is unavailable. The divider above the composer shows work without
-changing padding or layout; reduced motion keeps it still. The Voice lane has no
-composer. Browser-local entry recovery preserves drafts, failed submissions and
-queued edits across reloads for the verified workspace/thread. Storage is best
+native input carries paths only. See [image and file input](../docs/web-agent-input.md#clipboard-images)
+for storage lifecycle and failure behavior. Submission is ignored while its action
+is unavailable and the draft remains editable. The divider above the composer shows work without
+changing padding or layout; reduced motion keeps it still. Browser-local entry recovery
+preserves drafts and failed submissions across reloads for the verified workspace/thread. Storage is best
 effort in the same browser profile and origin; unavailable, evicted or cleared
 storage can prevent recovery. Recovered input is never automatically resent. The Funk kiosk
 supplies a stable single-window persistence identity so reopening it restores the
@@ -23,15 +23,15 @@ synchronous entry journal protects committed text before the full record is
 batched. A newly installed native bridge requires a later kiosk relaunch; old
 unidentified browser slots remain explicitly recoverable rather than being
 silently adopted from another active context.
-A quiet lined dock below Voice tracks the Agent composer's height, keeping the
-two transcript viewports aligned as drafts and queued messages expand.
-Empty lanes use one readable heading at the center of the transcript area,
+A single dock keeps the full-width textarea stable as drafts and queued messages expand.
+Existing host-owned queue rows remain readable and removable, but this UI cannot
+create, edit, resume, or steer queued rows. Empty sessions use one readable heading at the center of the transcript area,
 without secondary guidance or notices. Populated transcripts retain their status
 notices tied to observed text. Recording boundaries before any speech do not
 create a notice that can outlive the empty state. The mounted transcript and composer stay stable when the first message
-arrives or a lane is concealed, preserving drafts, focus and reading state.
+arrives, preserving drafts, focus and reading state.
 
-Both lanes window measured message blocks, open at the latest message and follow
+The Agent transcript windows measured message blocks, opens at the latest message and follows
 new text. Stable row identities retain tool expansion across polls, appends and
 group changes. Browser find sees mounted history; the API retains the complete
 loaded transcript. A single expanded activity group remains one measured block.
@@ -50,8 +50,8 @@ selected socket never falls back to the default server. See the
 [parallel production/test workflow](../docs/parallel-test-environment.md). A missing server shows “No agent voice server to connect to.”
 A server whose selected workspace has no marker or session yet shows a normal
 ready/empty state. A valid marker is restored at server startup, so authoritative
-Agent/Voice history is available before any voice client attaches. Detaching that
-client keeps the history available and continuing to update; sending is disabled
+Agent history is available before any voice client attaches. Detaching that
+client keeps the history available and continuing to update; submission is fenced
 while the composer stays editable. Transport unavailability is shown separately,
 with last verified text retained until it can be reverified. Actual session
 replacement clears old session presentation and action authority. The reader
@@ -119,8 +119,8 @@ accepts control protocols 5 and 6 so an existing call need not restart to open t
 the thread monitor/HUD also accepts these read-only status versions, while
 mutation discovery keeps the current protocol requirement. For transcript and action
 requests, the browser cannot select a workspace, thread, endpoint or RPC method.
-The separate read-only file picker can browse bounded visible directory metadata
-inside the host home folder and insert an absolute `@path` as ordinary composer text. Native sockets, descriptors,
+The composer accepts absolute-path paste/drop as ordinary editable `@path` text;
+the page has no file-picker UI. Native sockets, descriptors,
 credentials and grants remain in the local process. Requests require a loopback
 peer and exact direct-loopback or named HTTPS origin; foreign hosts/origins are
 refused. Remote Markdown images and embeds are blocked.
@@ -133,24 +133,23 @@ links keep browser navigation. Unsupported, unavailable or disallowed documents
 show an error; there is no arbitrary file browser or remote-page proxy. See
 [ADR 0063](../docs/adr/0063-linked-markdown-document-viewer.md) for the access boundary.
 
-The Voice lane incrementally tails the private, identity-checked server recording,
-including saved speech from previous calls on this exact thread.
+The server continues to tail the private, identity-checked voice recording,
+including saved speech from previous calls on this exact thread, but the web page
+does not render those raw rows.
 Draft deltas update stable item IDs; canonical completions replace them. Runtime
 and realtime-session IDs fence reused item IDs. Recording gaps remain visible.
 Recording reads retain the existing 64 MiB file / 1 MiB record limits. Observed
 times describe transcript receipt; they do not prove when speech was heard.
 
-The Agent lane uses event protocol 3: subscribe first, validate `state.get`, then
+The Agent transcript uses event protocol 3: subscribe first, validate `state.get`, then
 read `conversation.live.get` and page `conversation.items.list` newest first.
-First open shows one loading notice in the app header. Both panes remain hidden until the
-initial Agent history pass and the Voice file present at attachment are loaded,
-then appear together at the latest messages. Missing/unavailable Voice history
-uses its visible notice instead of holding the view indefinitely.
+First open shows one loading notice inside the transcript surface. The Agent lane
+reveals when its own initial history pass is ready and never waits for raw Voice history.
 Native history loads continuously in the background, one bounded request at a time, merged by turn
 and item ID. Pages accumulate privately until the pass finishes or reaches the
 viewer limit, then publish together. The API continues to collect live items while
-the header loading state holds the initial view. Both lanes open at the end
-without animated scrolling. Initial Agent loading has a five-second budget: a
+the loading state holds the initial Agent view. It opens at the end without
+animated scrolling. Initial Agent loading has a five-second budget: a
 slow or failed pass publishes the available batch once and reveals the view with
 a notice. Retries run in the background after a delay, never reopening the centered
 loader. Later refreshes retain the published history
@@ -199,24 +198,21 @@ keyboard input can take priority; control state remains current, and initial
 history reveal and call replacement still update atomically. Draft state stays
 inside the shared composer, keyed only by the call view identity.
 
-The Agent composer and matching Voice placeholder sit below the scroll areas,
-separated by full-width dividers. Both scrollbars end at those dividers, and the
-viewports stay aligned as drafts or queues grow. There is no overlay clearance.
-Headers use the transcript’s mono typography and shared reading alignment.
+The Agent composer sits below the scroll area, separated by a full-width divider.
+The scrollbar ends at that divider. There is no overlay clearance or reserved
+header space.
 The composer uses the dock canvas directly, with focus on its top divider instead
 of a nested input frame. Its thick line is bright when the native runtime is
 verified reachable, dim grey when unavailable, and animated only while reachable
 and working. Voice-client detachment alone keeps the bright state. Reduced motion
-uses a still working indicator; all states occupy the same geometry. Actions retain
-a 44px touch row. Multiline drafts and queue content can
-expand both docks together; long drafts scroll within the capped text field.
+uses a still working indicator; all states occupy the same geometry. Multiline
+drafts and queue content can expand the dock; long drafts scroll within the capped text field.
 Transient native observation capacity pressure keeps the last verified event
 transport and composer authority, labels the transcript as catching up, and retries
 without dimming the divider. Actual reader, observer, controller, or browser
-transport loss fences actions and names the reason beside the still-editable draft.
-An empty draft disables Send without fading the input group, and reconnect fencing
-dims only the unavailable actions so editable text does not visually claim to be
-disabled.
+transport loss fences submission and names the reason beside the still-editable draft.
+An empty draft simply ignores Enter. Reconnect fencing dims the divider while
+editable text retains full contrast.
 
 ## Agent input
 
@@ -228,15 +224,11 @@ turn ID. It does not override native settings, read native history through this
 gateway, navigate descendants, or answer approval requests. Mutation bodies require same-origin JSON and bounded
 text. No native endpoint, token, method selector or thread selector reaches the browser.
 
-Idle input sends immediately. While Agent works, the shared desktop-style mode
-menu defaults to Steer; Queue saves a FIFO follow-up for the next idle turn.
-Native completion dispatches queued input even when the browser stops polling.
-Rows support Steer, Edit and Remove. Editing holds the row until the awaited
-save/cancel handshake releases it. This UI omits Stop and always shows Send, disabled when not actionable.
-The follow-up selector determines Steer or Queue behavior while running; Working
-sits at the upper-right of the composer without moving its controls.
-The underlying interrupt API and queued-work pause semantics remain supported.
-Resume explicitly releases paused rows.
+Enter submits idle input immediately and steers the current turn while Agent works;
+Shift+Enter inserts a line break. The page has no Send button, mode menu, Stop
+control, or queue-creation affordance. Existing queued rows from compatible clients
+remain visible with their server state and can be removed. The underlying interrupt,
+queue, editing, resume, and file-list APIs remain supported for compatible clients.
 
 The host saves at most 20 queued messages (64 KiB each) in private mode-0600
 `web/queued-messages.json` under AgentVoice state for the default endpoint.
@@ -298,33 +290,20 @@ calls and saved voice records. They cover ordering, canonical replacement, late
 responses, call ownership and teardown. Dev and preview tests use the real portless
 HTTPS proxy library with a temporary certificate on unprivileged ports, including
 HMR, exact origins, duplicate binding and shutdown. Browser tests exercise the owned
-components directly and through the app with synthetic transcripts, checking both lanes, scroll following,
+components directly and through the app with synthetic transcripts, checking the Agent lane, scroll following,
 disclosures, reconnects and narrow windows. They write ignored screenshots/traces
 under `web/test-results/`. No test uses credentials, microphones or model turns.
 
-## Presentation preference
+## Presentation
 
-The Agent / Voice / Both switch selects the visible panes; Both is the default.
-Hidden panes remain mounted and keep their draft, disclosures and reading state
-while new history arrives. One responsive app header contains AgentVoice branding,
-the current view label, connection status and the square segmented selector. Pane
-names remain accessible without duplicate sticky headings. Status has a reserved
-line, so connection changes do not move the transcript. In Both mode, the bottom docks share
-a three-pixel divider and matching geometry; the Voice line uses translucent lime.
-Voice-only hides its alignment placeholder and reclaims the full transcript height.
+The page begins directly with the single Agent transcript and composer. Loading,
+offline, and reconnect state appears only when necessary inside that surface.
+Legacy Agent/Voice/Both preference bytes are ignored; the app performs no pane
+preference reads or writes.
 
 Text and native controls use the same monospace stack, including portal dialogs.
 Voice details open in a square-cornered dialog with an inset inspection control;
 the dialog title supplies its accessible name without a redundant visible hint.
 
-Selection is written immediately to browser-local storage, independently of the
-call/workspace. A Funk kiosk uses its existing stable instance identity, so the
-same kiosk profile/origin restores its choice after exit/reopen. Ordinary browser
-tabs share the saved default without forcing another active tab to switch. Invalid
-values or blocked reads default to Both; failed writes leave the switch usable
-and show “View saved for this visit only.” Cleared, evicted or unavailable storage
-cannot guarantee restoration. No native action or voice attachment is triggered.
-
-Steer/Queue already persists with the composer. Runtime status and transient
-scroll/follow/disclosure state are not stored as presentation defaults. See
-[ADR 0064](../docs/adr/0064-browser-presentation-preferences.md).
+Runtime status and transient scroll/follow/disclosure state are not stored as
+presentation defaults. See [ADR 0102](../docs/adr/0102-agent-only-web-transcript.md).

@@ -99,7 +99,7 @@ test("windowed subagent groups keep every lifecycle body reachable after polling
   await expect(followup).toBeInViewport();
 });
 
-test("one header loading state reveals both histories at the end and preserves later Voice scrolling", async ({
+test("in-surface loading reveals Agent history without waiting for Voice history", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -124,14 +124,8 @@ test("one header loading state reveals both histories at the end and preserves l
   };
   await page.route("**/api/live", (route) => route.fulfill({ json: view }));
   await page.goto("/");
-  await expect(page.getByRole("status")).toHaveCount(1);
-  await expect(page.getByRole("status")).toHaveText("Loading conversation…");
-  await expect(page.getByRole("region", { name: "Voice transcript", exact: true })).toHaveCount(0);
+  await expect(page.locator(".transcript-status")).toHaveText("Loading conversation…");
   await expect(page.getByRole("region", { name: "Agent transcript", exact: true })).toHaveCount(0);
-  const status = await page.getByRole("status").boundingBox();
-  const header = await page.locator(".app-header").boundingBox();
-  expect(status!.x).toBeGreaterThanOrEqual(header!.x);
-  expect(status!.y + status!.height).toBeLessThanOrEqual(header!.y + header!.height);
   view = {
     ...view,
     agentHistoryLoading: false,
@@ -143,27 +137,20 @@ test("one header loading state reveals both histories at the end and preserves l
       ...view.agent,
     ],
   };
-  await expect.poll(() => page.locator(".dual-pane").getAttribute("hidden")).toBe("");
-  view.voiceHistoryLoading = false;
-  const voice = page.getByRole("region", { name: "Voice transcript", exact: true });
   const agent = page.getByRole("region", { name: "Agent transcript", exact: true });
-  await expect(page.locator(".app-status")).toHaveText("");
+  await expect(page.locator(".transcript-status")).toHaveCount(0);
   await expect(agent.getByText("Live Agent while history loads")).toBeInViewport();
-  for (const lane of [voice, agent])
-    await expect
-      .poll(() =>
-        lane.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
-      )
-      .toBeLessThan(2);
-  await voice.hover();
-  await page.mouse.wheel(0, -100_000);
-  await expect.poll(() => voice.evaluate((element) => element.scrollTop)).toBeLessThan(2);
+  await expect
+    .poll(() =>
+      agent.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
+    )
+    .toBeLessThan(2);
+  expect(view.voiceHistoryLoading).toBe(true);
   view.agent.push(message("after-history", "New Agent after history"));
   await expect(agent.getByText("New Agent after history")).toBeInViewport();
-  expect(await voice.evaluate((element) => element.scrollTop)).toBeLessThan(2);
 });
 
-test("two independent transcripts follow live updates, retain disclosures, and reconnect without call controls", async ({
+test("the Agent transcript follows updates, retains disclosures, and ignores raw Voice rows", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -176,10 +163,7 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   });
   await page.goto("/");
   await expect(page.getByText("No agent voice server to connect to.")).toHaveCount(1);
-  await expect(page.getByRole("button")).toHaveCount(3);
-  await expect(
-    page.getByRole("group", { name: "Transcript view" }).getByRole("button"),
-  ).toHaveCount(3);
+  await expect(page.getByRole("button")).toHaveCount(0);
   view = { ...view, phase: "empty", id: "empty" };
   await expect(
     page.getByText("AgentVoice is ready. Start a client to begin a workspace session."),
@@ -190,11 +174,11 @@ test("two independent transcripts follow live updates, retain disclosures, and r
     id: "call-one",
     voice: [
       message("human", "Could you check the connection?", "user"),
-      message("answer", "The two transcripts are connected."),
+      message("answer", "This raw Voice answer must stay hidden."),
     ],
     agent: [
       message("prompt", "Verify the live transcript reader.", "user"),
-      ...Array.from({ length: 24 }, (_, i) =>
+      ...Array.from({ length: 60 }, (_, i) =>
         message(`old-${i}`, `Check ${i + 1}. ${"The observation is read-only. ".repeat(8)}`),
       ),
       message("tool", "", "tool"),
@@ -206,25 +190,17 @@ test("two independent transcripts follow live updates, retain disclosures, and r
     state: "complete",
     sections: [{ label: "Output", content: "All checks passed" }],
   };
-  const voice = page.getByRole("region", { name: "Voice transcript", exact: true });
   const agent = page.getByRole("region", { name: "Agent transcript", exact: true });
-  await expect(voice.getByText("Could you check the connection?")).toBeVisible();
+  await expect(page.getByText("Could you check the connection?")).toHaveCount(0);
   await expect
     .poll(() =>
       agent.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
     )
     .toBeLessThan(2);
-  await expect(voice.locator(".message-author").first()).toHaveText("Human");
-  await expect(voice.locator(".message-author").last()).toHaveText("Agent");
   await expect(agent.locator("time")).toHaveCount(0);
   const lanes = page.locator(".lane");
-  await expect(lanes.nth(0)).toHaveAccessibleName("Agent");
-  await expect(lanes.nth(1)).toHaveAccessibleName("Voice");
-  const left = await lanes.nth(0).boundingBox();
-  const right = await lanes.nth(1).boundingBox();
-  expect(left!.y).toBe(right!.y);
-  expect(left!.width).toBe(right!.width);
-  expect(right!.x).toBeGreaterThan(left!.x);
+  await expect(lanes).toHaveCount(1);
+  await expect(lanes).toHaveAccessibleName("Agent");
   expect(await agent.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
   expect(await agent.evaluate((el) => el.clientHeight)).toBeLessThan(1000);
   view.agent.push(message("draft", "Streaming draft"));
@@ -233,14 +209,14 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   view.voice.push(message("voice-live", "I can see the update.", "user"));
   await expect(agent.getByText("The canonical completion.", { exact: true })).toBeInViewport();
   await expect(agent.getByText("Streaming draft", { exact: true })).toHaveCount(0);
-  await expect(voice.getByText("I can see the update.")).toBeInViewport();
+  await expect(page.getByText("I can see the update.")).toHaveCount(0);
   expect(reads).toBeGreaterThan(3);
   await agent.locator(".tool-disclosure__trigger").click();
   await expect(agent.getByText("All checks passed", { exact: true })).toBeVisible();
   view.voice.push(message("still-watching", "Still watching."));
-  await expect(voice.getByText("Still watching.")).toBeVisible();
+  await expect(page.getByText("Still watching.")).toHaveCount(0);
   await expect(agent.getByText("All checks passed", { exact: true })).toBeVisible();
-  await page.screenshot({ path: "test-results/dual-pane.png", fullPage: true });
+  await page.screenshot({ path: "test-results/agent-transcript.png", fullPage: true });
   view = {
     phase: "live",
     id: "call-two",
@@ -249,18 +225,17 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   };
   await expect(agent.getByText("A new call is connected.")).toBeVisible();
   await expect(agent.getByText("The canonical completion.")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "No voice text yet" })).toBeVisible();
   await page.setViewportSize({ width: 600, height: 600 });
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     .toBe(true);
-  const narrowLeft = await lanes.nth(0).boundingBox();
-  const narrowRight = await lanes.nth(1).boundingBox();
-  expect(narrowLeft!.y).toBe(narrowRight!.y);
+  await expect(lanes).toHaveCount(1);
   expect(errors).toEqual([]);
 });
 
-test("an empty retained session keeps both lanes and an interactive composer", async ({ page }) => {
+test("an empty retained session keeps the Agent transcript and an interactive composer", async ({
+  page,
+}) => {
   let posts = 0;
   const view: LiveView = {
     phase: "detached",
@@ -283,18 +258,15 @@ test("an empty retained session keeps both lanes and an interactive composer", a
   });
   await page.goto("/");
 
-  await expect(page.locator(".app-status")).toHaveText("");
-  await expect(page.locator(".app-status")).not.toHaveAttribute("data-visible");
+  await expect(page.locator(".transcript-status")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Agent transcript", exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Voice transcript", exact: true })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "No agent messages yet", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No voice text yet", exact: true })).toBeVisible();
   const input = page.getByRole("textbox", { name: "Message Agent" });
   await expect(input).toBeEnabled();
   await input.fill("Editable while voice is detached");
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await input.press("Enter");
   await expect.poll(() => posts).toBe(1);
 });
 
@@ -326,14 +298,13 @@ test("HTTP failures show reconnect state, retain last text, and recover automati
     ),
   );
   await page.goto("/");
-  await expect(page.getByText("Voice remains readable.")).toBeVisible();
+  await expect(page.getByText("Voice remains readable.")).toHaveCount(0);
   await expect(
     page.getByText("Agent transcript is catching up. Input remains available.", { exact: true }),
   ).toBeVisible();
   const input = page.getByRole("textbox", { name: "Message Agent" });
   await input.fill("Retained through browser failure");
-  const send = page.getByRole("button", { name: "Send", exact: true });
-  await expect(send).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toHaveCount(0);
   fail = true;
   await expect(page.getByText("Agent transcript is reconnecting…")).toHaveCount(1);
   await expect(
@@ -347,9 +318,10 @@ test("HTTP failures show reconnect state, retain last text, and recover automati
   await expect(
     page.getByText("Agent transcript disconnected. Reconnecting…", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Voice remains readable.")).toBeVisible();
+  await expect(page.getByText("Voice remains readable.")).toHaveCount(0);
   await expect(input).toHaveValue("Retained through browser failure");
-  await expect(send).toBeDisabled();
+  await input.press("Enter");
+  await expect(input).toHaveValue("Retained through browser failure");
   fail = false;
   await expect(page.getByText("Agent transcript is reconnecting…")).toHaveCount(0);
   await expect(
@@ -360,10 +332,9 @@ test("HTTP failures show reconnect state, retain last text, and recover automati
   await expect(
     page.getByText("Agent transcript is catching up. Input remains available.", { exact: true }),
   ).toBeVisible();
-  await expect(send).toBeEnabled();
 });
 
-test("both lanes use the shared unread count and resume following after jumping", async ({
+test("the Agent transcript counts unread messages and resumes following after jumping", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -373,47 +344,39 @@ test("both lanes use the shared unread count and resume following after jumping"
     voice: [],
     agent: [],
   };
-  for (const lane of ["voice", "agent"] as const) {
-    view[lane] = Array.from({ length: 25 }, (_, i) =>
-      message(
-        `${lane}-${i}`,
-        `${lane} message ${i}. ${"Text to make the lane scroll. ".repeat(15)}`,
-      ),
-    );
-  }
+  view.agent = Array.from({ length: 25 }, (_, i) =>
+    message(`agent-${i}`, `agent message ${i}. ${"Text to make the lane scroll. ".repeat(15)}`),
+  );
   await page.route("**/api/live", (route) => route.fulfill({ json: view }));
   await page.goto("/");
-  for (const lane of ["voice", "agent"] as const) {
-    const title = lane === "voice" ? "Voice" : "Agent";
-    const section = page.getByRole("region", { name: title, exact: true });
-    const viewport = page.getByRole("region", { name: `${title} transcript`, exact: true });
-    const gap = () => viewport.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
-    await expect.poll(gap).toBeLessThan(2);
-    view[lane].push(message(`${lane}-following`, `${title} follows at bottom`));
-    await expect(viewport.getByText(`${title} follows at bottom`)).toBeInViewport();
-    await viewport.hover();
-    await page.mouse.wheel(0, -100_000);
-    await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeLessThan(2);
-    view[lane].push(message(`${lane}-new-1`, `${title} unread one`));
-    await expect(
-      section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
-    ).toBeVisible();
-    view[lane][view[lane].length - 1] = message(`${lane}-new-1`, `${title} unread one completed`);
-    view[lane].push(message(`${lane}-new-2`, `${title} unread two`));
-    const chip = section.getByRole("button", {
-      name: "2 new messages. Jump to latest",
-      exact: true,
-    });
-    await expect(chip).toBeVisible();
-    expect(await viewport.evaluate((el) => el.scrollTop)).toBeLessThan(2);
-    await chip.click();
-    await expect.poll(gap).toBeLessThan(2);
-    await expect(chip).toHaveCount(0);
-    view[lane].push(message(`${lane}-resumed`, `${title} follows again`));
-    await expect(viewport.getByText(`${title} follows again`)).toBeInViewport();
-    await expect(
-      section.getByRole("button", { name: /new messages?\. Jump to latest/ }),
-    ).toHaveCount(0);
-  }
+  const section = page.getByRole("region", { name: "Agent", exact: true });
+  const viewport = page.getByRole("region", { name: "Agent transcript", exact: true });
+  const gap = () => viewport.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
+  await expect.poll(gap).toBeLessThan(2);
+  view.agent.push(message("agent-following", "Agent follows at bottom"));
+  await expect(viewport.getByText("Agent follows at bottom")).toBeInViewport();
+  await viewport.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeLessThan(2);
+  view.agent.push(message("agent-new-1", "Agent unread one"));
+  await expect(
+    section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
+  ).toBeVisible();
+  view.agent[view.agent.length - 1] = message("agent-new-1", "Agent unread one completed");
+  view.agent.push(message("agent-new-2", "Agent unread two"));
+  const chip = section.getByRole("button", {
+    name: "2 new messages. Jump to latest",
+    exact: true,
+  });
+  await expect(chip).toBeVisible();
+  expect(await viewport.evaluate((el) => el.scrollTop)).toBeLessThan(2);
+  await chip.click();
+  await expect.poll(gap).toBeLessThan(2);
+  await expect(chip).toHaveCount(0);
+  view.agent.push(message("agent-resumed", "Agent follows again"));
+  await expect(viewport.getByText("Agent follows again")).toBeInViewport();
+  await expect(section.getByRole("button", { name: /new messages?\. Jump to latest/ })).toHaveCount(
+    0,
+  );
   await page.screenshot({ path: "test-results/follow-chip.png", fullPage: true });
 });

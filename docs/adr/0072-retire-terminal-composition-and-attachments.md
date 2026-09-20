@@ -17,12 +17,13 @@ Bare `agentvoice` prints help. `agentvoice client` remains the explicit pointer
 and voice frontend. The server, service, phone, network, role, MCP, event and
 thread commands keep their existing ownership.
 
-The AgentVoice web UI is the durable Agent and Voice transcript surface and the
+The AgentVoice web UI is the durable transcript surface and the
 host-side typed Agent input surface. Remove the bare-command smolmux composition,
 desktop `--attach` view, `attach agent`, `attach voice`, SSH transcript bridge,
 stock Codex TUI launcher, codex-viewer integration and their private framing and
 selection machinery. Persistent voice recording remains server-owned, and the web
-reader retains its bounded identity, inode, permission and size checks.
+reader retains its bounded identity, inode, permission and size checks. [ADR 0102](0102-agent-only-web-transcript.md)
+later removes raw Voice rendering while preserving that server boundary.
 
 Keep the runtime-owned authenticated loopback gateway because the web composer
 and explicit speech helper use it. Narrow each ticket to the exact current root

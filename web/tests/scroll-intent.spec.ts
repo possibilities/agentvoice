@@ -32,7 +32,7 @@ const toolMessage = (id: string) => ({
   },
 });
 
-test("both lanes release follow on the first small upward wheel and retain reading through updates", async ({
+test("the Agent transcript releases follow on small upward wheels and retains reading through updates", async ({
   page,
 }) => {
   const view: LiveView = {
@@ -43,59 +43,52 @@ test("both lanes release follow on the first small upward wheel and retain readi
     voice: [],
     agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
   };
-  for (const lane of ["agent", "voice"] as const) {
-    view[lane] = Array.from({ length: 300 }, (_, index) => ({
-      id: `${lane}-${index}`,
-      role: "assistant",
-      status: "complete",
-      content: `${lane} entry ${index}. ${"A variable-length transcript fixture. ".repeat(4 + (index % 9))}`,
-    }));
-  }
+  view.agent = Array.from({ length: 300 }, (_, index) => ({
+    id: `agent-${index}`,
+    role: "assistant",
+    status: "complete",
+    content: `agent entry ${index}. ${"A variable-length transcript fixture. ".repeat(4 + (index % 9))}`,
+  }));
   await page.route("**/api/live", (route) => route.fulfill({ json: view }));
   await page.goto("/");
   const input = page.getByRole("textbox", { name: "Message Agent" });
-  await input.fill("Draft stays while reading either lane");
-  for (const lane of ["agent", "voice"] as const) {
-    const name = lane === "agent" ? "Agent" : "Voice";
-    const section = page.getByRole("region", { name, exact: true });
-    const viewport = page.getByRole("region", { name: `${name} transcript`, exact: true });
-    const gap = () => viewport.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
-    await expect.poll(gap).toBeLessThan(2);
-    await viewport.hover();
+  await input.fill("Draft stays while reading the transcript");
+  const section = page.getByRole("region", { name: "Agent", exact: true });
+  const viewport = page.getByRole("region", { name: "Agent transcript", exact: true });
+  const gap = () => viewport.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
+  await expect.poll(gap).toBeLessThan(2);
+  await viewport.hover();
+  await page.mouse.wheel(0, -1);
+  await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+  for (let count = 0; count < 3; count++) {
+    await page.waitForTimeout(80);
     await page.mouse.wheel(0, -1);
-    await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
-    for (let count = 0; count < 3; count++) {
-      await page.waitForTimeout(80);
-      await page.mouse.wheel(0, -1);
-    }
-    const before = await anchor(viewport);
-    expect(before).not.toBeNull();
-    view[lane].push({
-      id: `${lane}-new`,
-      role: "assistant",
-      status: "streaming",
-      content: "New streamed entry.",
-    });
-    await expect(
-      section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
-    ).toBeVisible();
-    // An input-intent timer must not resume following after the quiet interval.
-    await page.waitForTimeout(1100);
-    view[lane][view[lane].length - 1] = {
-      ...view[lane][view[lane].length - 1]!,
-      content: "Continued streaming. ".repeat(100),
-    };
-    await page.waitForTimeout(1200);
-    const after = await anchor(viewport);
-    expect(after?.key).toBe(before?.key);
-    expect(Math.abs(after!.top - before!.top)).toBeLessThanOrEqual(2);
-    await expect.poll(gap).toBeGreaterThan(64);
-    await section
-      .getByRole("button", { name: "1 new message. Jump to latest", exact: true })
-      .click();
-    await expect.poll(gap).toBeLessThan(2);
   }
-  await expect(input).toHaveValue("Draft stays while reading either lane");
+  const before = await anchor(viewport);
+  expect(before).not.toBeNull();
+  view.agent.push({
+    id: "agent-new",
+    role: "assistant",
+    status: "streaming",
+    content: "New streamed entry.",
+  });
+  await expect(
+    section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
+  ).toBeVisible();
+  // An input-intent timer must not resume following after the quiet interval.
+  await page.waitForTimeout(1100);
+  view.agent[view.agent.length - 1] = {
+    ...view.agent[view.agent.length - 1]!,
+    content: "Continued streaming. ".repeat(100),
+  };
+  await page.waitForTimeout(1200);
+  const after = await anchor(viewport);
+  expect(after?.key).toBe(before?.key);
+  expect(Math.abs(after!.top - before!.top)).toBeLessThanOrEqual(2);
+  await expect.poll(gap).toBeGreaterThan(64);
+  await section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }).click();
+  await expect.poll(gap).toBeLessThan(2);
+  await expect(input).toHaveValue("Draft stays while reading the transcript");
 });
 
 for (const width of [1440, 390]) {
@@ -108,101 +101,93 @@ for (const width of [1440, 390]) {
       persistenceScope: "sparse-scope",
       phase: "live",
       agent: [{ id: "a", role: "assistant", status: "complete", content: "A short answer." }],
-      voice: [{ id: "v", role: "user", status: "complete", content: "A short question." }],
+      voice: [{ id: "v", role: "user", status: "complete", content: "Hidden raw speech." }],
       agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
     };
     await page.route("**/api/live", (route) => route.fulfill({ json: view }));
     await page.goto("/");
-    for (const lane of ["agent", "voice"] as const) {
-      const name = lane === "agent" ? "Agent" : "Voice";
-      const section = page.getByRole("region", { name, exact: true });
-      const viewport = page.getByRole("region", { name: `${name} transcript`, exact: true });
-      await expect(viewport).toBeVisible();
-      await expect.poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight)).toBe(0);
-      await expect
-        .poll(() =>
-          viewport.evaluate((e) => {
-            const row = e.querySelector<HTMLElement>("[data-windowed-row-key]")!;
-            return row.getBoundingClientRect().top - e.getBoundingClientRect().top;
+    const section = page.getByRole("region", { name: "Agent", exact: true });
+    const viewport = page.getByRole("region", { name: "Agent transcript", exact: true });
+    await expect(viewport).toBeVisible();
+    await expect.poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight)).toBe(0);
+    await expect
+      .poll(() =>
+        viewport.evaluate((e) => {
+          const row = e.querySelector<HTMLElement>("[data-windowed-row-key]")!;
+          return row.getBoundingClientRect().top - e.getBoundingClientRect().top;
+        }),
+      )
+      .toBeGreaterThanOrEqual(16);
+    await viewport.hover();
+    await page.mouse.wheel(0, -50);
+    await viewport.focus();
+    for (const key of ["ArrowUp", "PageUp", "Home", "Shift+Space"]) await page.keyboard.press(key);
+    await viewport.evaluate((element) => {
+      for (const [type, clientY] of [
+        ["touchstart", 100],
+        ["touchmove", 160],
+        ["touchend", 0],
+      ] as const) {
+        element.dispatchEvent(
+          new TouchEvent(type, {
+            bubbles: true,
+            touches:
+              type === "touchend" ? [] : [new Touch({ identifier: 1, target: element, clientY })],
           }),
-        )
-        .toBeGreaterThanOrEqual(16);
-      await viewport.hover();
-      await page.mouse.wheel(0, -50);
-      await viewport.focus();
-      for (const key of ["ArrowUp", "PageUp", "Home", "Shift+Space"])
-        await page.keyboard.press(key);
-      await viewport.evaluate((element) => {
-        for (const [type, clientY] of [
-          ["touchstart", 100],
-          ["touchmove", 160],
-          ["touchend", 0],
-        ] as const) {
-          element.dispatchEvent(
-            new TouchEvent(type, {
-              bubbles: true,
-              touches:
-                type === "touchend" ? [] : [new Touch({ identifier: 1, target: element, clientY })],
-            }),
-          );
-        }
-      });
-      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
-      view[lane].push({
-        id: `${lane}-second`,
-        role: "assistant",
-        status: "complete",
-        content: "Still fits.",
-      });
-      await expect(section.getByText("Still fits.")).toBeVisible();
-      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
-      // A prior ineffective gesture must not leave subsequent overflowing text unfollowed.
-      view[lane].push({
-        id: `${lane}-long`,
-        role: "assistant",
-        status: "complete",
-        content: "Growing conversation. ".repeat(300),
-      });
-      await expect
-        .poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight))
-        .toBeGreaterThan(100);
-      await expect
-        .poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight - e.scrollTop))
-        .toBeLessThan(2);
-      await viewport.hover();
-      await page.mouse.wheel(0, -1);
-      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
-      await page.mouse.wheel(0, -100);
-      await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
-      await expect(
-        section.getByRole("button", { name: "Jump to latest", exact: true }),
-      ).toBeVisible();
-      // Returning to a fitting transcript clears the now-meaningless jump state.
-      view[lane].pop();
-      await expect.poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight)).toBe(0);
-      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
-    }
+        );
+      }
+    });
+    await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+    view.agent.push({
+      id: "agent-second",
+      role: "assistant",
+      status: "complete",
+      content: "Still fits.",
+    });
+    await expect(section.getByText("Still fits.")).toBeVisible();
+    await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+    // A prior ineffective gesture must not leave subsequent overflowing text unfollowed.
+    view.agent.push({
+      id: "agent-long",
+      role: "assistant",
+      status: "complete",
+      content: "Growing conversation. ".repeat(300),
+    });
+    await expect
+      .poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight))
+      .toBeGreaterThan(100);
+    await expect
+      .poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight - e.scrollTop))
+      .toBeLessThan(2);
+    await viewport.hover();
+    await page.mouse.wheel(0, -1);
+    await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+    await page.mouse.wheel(0, -100);
+    await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
+    await expect(
+      section.getByRole("button", { name: "Jump to latest", exact: true }),
+    ).toBeVisible();
+    // Returning to a fitting transcript clears the now-meaningless jump state.
+    view.agent.pop();
+    await expect.poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight)).toBe(0);
+    await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
     await page.screenshot({ path: `test-results/sparse-${width}.png` });
   });
 }
 
 test("enlarging the viewport clears a jump state once all messages fit", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 500 });
-  const messages: LiveView["voice"] = Array.from({ length: 8 }, (_, i) => ({
+  const messages: LiveView["agent"] = Array.from({ length: 8 }, (_, i) => ({
     id: `resize-${i}`,
     role: "user",
     status: "complete",
     content: `Message ${i}`,
   }));
   await page.route("**/api/live", (route) =>
-    route.fulfill({ json: { id: "resize", phase: "live", agent: [], voice: messages } }),
+    route.fulfill({ json: { id: "resize", phase: "live", agent: messages, voice: [] } }),
   );
   await page.goto("/");
-  await page
-    .getByRole("group", { name: "Transcript view" })
-    .getByRole("button", { name: "Voice", exact: true })
-    .click();
-  const viewport = page.getByRole("region", { name: "Voice transcript", exact: true });
+  const viewport = page.getByRole("region", { name: "Agent transcript", exact: true });
   await expect
     .poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight))
     .toBeGreaterThan(0);
@@ -215,56 +200,54 @@ test("enlarging the viewport clears a jump state once all messages fit", async (
   await expect(page.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
 });
 
-for (const lane of ["agent", "voice"] as const)
-  test(`${lane} visible tool updates stay out of the unread count until a new prose row is unseen`, async ({
-    page,
-  }) => {
-    const messages: LiveView[typeof lane] = [
-      ...Array.from({ length: 40 }, (_, index) => ({
-        id: `${lane}-lead-${index}`,
-        role: "assistant" as const,
-        status: "complete" as const,
-        content: `Earlier message ${index}. ${"Scrollable history. ".repeat(4)}`,
-      })),
-      toolMessage(`${lane}-tool-1`),
-    ];
-    const view: LiveView = {
-      id: `${lane}-visible-tool-tail`,
-      persistenceScope: `${lane}-visible-tool-tail`,
-      phase: "live",
-      agent: lane === "agent" ? messages : [],
-      voice: lane === "voice" ? messages : [],
-    };
-    await page.route("**/api/live", (route) => route.fulfill({ json: view }));
-    await page.goto("/");
+test("visible Agent tool updates stay out of the unread count until a new prose row is unseen", async ({
+  page,
+}) => {
+  const messages: LiveView["agent"] = [
+    ...Array.from({ length: 40 }, (_, index) => ({
+      id: `agent-lead-${index}`,
+      role: "assistant" as const,
+      status: "complete" as const,
+      content: `Earlier message ${index}. ${"Scrollable history. ".repeat(4)}`,
+    })),
+    toolMessage("agent-tool-1"),
+  ];
+  const view: LiveView = {
+    id: "agent-visible-tool-tail",
+    persistenceScope: "agent-visible-tool-tail",
+    phase: "live",
+    agent: messages,
+    voice: [],
+  };
+  await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+  await page.goto("/");
 
-    const title = lane === "agent" ? "Agent" : "Voice";
-    const section = page.getByRole("region", { name: title, exact: true });
-    const viewport = page.getByRole("region", { name: `${title} transcript`, exact: true });
-    await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
-    await viewport.hover();
-    await page.mouse.wheel(0, -1);
+  const section = page.getByRole("region", { name: "Agent", exact: true });
+  const viewport = page.getByRole("region", { name: "Agent transcript", exact: true });
+  await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
+  await viewport.hover();
+  await page.mouse.wheel(0, -1);
+  await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
+  await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+
+  for (let index = 2; index <= 4; index++) {
+    messages.push(toolMessage(`agent-tool-${index}`));
+    await expect(section.getByText(`${index} activities`, { exact: true })).toBeVisible();
     await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
     await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+  }
 
-    for (let index = 2; index <= 4; index++) {
-      messages.push(toolMessage(`${lane}-tool-${index}`));
-      await expect(section.getByText(`${index} activities`, { exact: true })).toBeVisible();
-      await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
-      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
-    }
-
-    messages.push({
-      id: `${lane}-new-prose`,
-      role: "assistant",
-      status: "complete",
-      content: "A new prose message below the visible tail.",
-    });
-    await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
-    await expect(
-      section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
-    ).toBeVisible();
+  messages.push({
+    id: "agent-new-prose",
+    role: "assistant",
+    status: "complete",
+    content: "A new prose message below the visible tail.",
   });
+  await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
+  await expect(
+    section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
+  ).toBeVisible();
+});
 
 test("offscreen tool growth activates a generic jump control and mixed prose adds the count", async ({
   page,

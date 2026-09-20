@@ -2,7 +2,6 @@
 
 export type {
   TranscriptComposerProps,
-  TranscriptFollowUpMode,
   TranscriptQueuedMessage,
   TranscriptSubmission,
 } from "./composer";

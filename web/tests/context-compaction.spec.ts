@@ -4,7 +4,7 @@ import type { LiveView } from "../src/types.ts";
 
 const card = { id: "compact", ...contextCompactionMessage(true) };
 
-test("shared system card renders consistently in either pane and stays readable when narrow", async ({
+test("system card renders in the Agent transcript and stays readable when narrow", async ({
   page,
 }) => {
   const view: LiveView = {
@@ -14,21 +14,19 @@ test("shared system card renders consistently in either pane and stays readable 
     voice: [card],
     agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
   };
-  // Voice currently emits only speech; this fixture verifies shared renderer support, not a native event.
   await page.route("**/api/live", (route) => route.fulfill({ json: view }));
   await page.goto("/");
-  for (const lane of ["Agent", "Voice"]) {
-    const pane = page.getByRole("region", { name: lane, exact: true });
-    const note = pane.getByRole("note", { name: "Context compacted", exact: true });
-    await expect(note).toBeVisible();
-    await expect(note).toHaveAttribute("data-role", "system");
-    await expect(note).toContainText(card.content);
-    await expect(pane.locator(".message-author")).toHaveCount(0);
-    await expect(pane.locator(".activity-group__trigger")).toHaveCount(0);
-  }
+  const pane = page.getByRole("region", { name: "Agent", exact: true });
+  const note = pane.getByRole("note", { name: "Context compacted", exact: true });
+  await expect(note).toBeVisible();
+  await expect(note).toHaveAttribute("data-role", "system");
+  await expect(note).toContainText(card.content);
+  await expect(pane.locator(".message-author")).toHaveCount(0);
+  await expect(pane.locator(".activity-group__trigger")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Voice", exact: true })).toHaveCount(0);
   await page.screenshot({ path: "test-results/context-compaction.png", fullPage: true });
   await page.setViewportSize({ width: 600, height: 700 });
-  await expect(page.getByRole("note", { name: "Context compacted" }).first()).toBeVisible();
+  await expect(page.getByRole("note", { name: "Context compacted" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/context-compaction-narrow.png", fullPage: true });
 });

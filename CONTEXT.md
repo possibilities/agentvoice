@@ -289,11 +289,13 @@ _Avoid_: speech replay, control attachment, transcript database.
 
 **Transcript UI** — The AgentVoice-owned provider-neutral message model, Codex
 presentation adapters, React transcript/composer/document components, and scoped
-styles under `web/src/transcript-ui/`. It renders Agent and Voice observations and
+styles under `web/src/transcript-ui/`. It renders one headerless Agent stream and
 accepts host-authorized Agent input without owning native history, transport, or
-work execution. It has one full-transcript surface; registered system cards may
+work execution. Projected voice handoffs remain readable `Via Voice` Human rows;
+raw Voice observations are not a second visual lane. It has one full-transcript surface; registered system cards may
 consume an exact native item type copied into the render message. _Avoid_:
-messages-only detail mode, shared AgentChats package, vendor archive, cross-checkout UI import.
+raw Voice lane, pane preference, messages-only detail mode, shared AgentChats package,
+vendor archive, cross-checkout UI import.
 
 **Live conversation snapshot** — A bounded projection of conversation items and
 updates actually received by the controller, with an exact publication-sequence
@@ -320,8 +322,8 @@ state. _Avoid_: current routing state, routing query, execution authority.
 **Voice transcript** — Automatic private JSONL observation of a workspace session's native voice
 items, stored under state/voice/<canonical-workspace-hash>/<thread-id>.jsonl.
 Resumed conversations append to the same file; recordings survive server shutdown.
-The web Voice lane reads them through the same bounded identity checks, independently
-of recording.
+The web server continues to read them through the same bounded identity checks for
+its compatible data contract, but the web UI does not render a raw Voice lane.
 This is observed text, not proof of what was heard. It is never automatically
 converted into voice input (ADR 0074).
 

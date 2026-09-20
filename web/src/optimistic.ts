@@ -14,7 +14,7 @@ export type OptimisticSubmission = {
 
 export function observed(view: LiveView, id: string) {
   return (
-    view.agent.some((message) => message.id === `client:${id}`) ||
+    view.agent.some((message) => message.id === `client:${id}` && message.status === "complete") ||
     view.agentControls?.queue.some((row) => row.id === id) === true
   );
 }
@@ -24,39 +24,50 @@ export function optimisticMessages(
   messages: TranscriptMessage[],
   submissions: OptimisticSubmission[],
 ): TranscriptMessage[] {
-  const ids = new Set(messages.map((message) => message.id));
+  const completed = new Set(
+    messages.filter((message) => message.status === "complete").map((message) => message.id),
+  );
   const pending = submissions.filter(
-    (row) => row.action !== "queue" && !ids.has(`client:${row.id}`),
+    (row) => row.action !== "queue" && !completed.has(`client:${row.id}`),
   );
   if (!pending.length) return messages;
+  const pendingById = new Map(pending.map((row) => [`client:${row.id}`, row]));
+  const localMessage = (row: OptimisticSubmission): TranscriptMessage => ({
+    id: `client:${row.id}`,
+    role: "user",
+    content: row.text,
+    status: row.state === "unknown" ? "error" : "working",
+    ...(row.images?.length ? { pendingImageCount: row.images.length } : {}),
+    deliveryStatus:
+      row.state === "unknown"
+        ? "Delivery unknown · check before resending"
+        : row.state === "accepted"
+          ? "Accepted · waiting for transcript"
+          : row.action === "steer"
+            ? "Steering…"
+            : "Sending…",
+  });
+  // A native item can expose an exact client identity before its content settles.
+  // Keep the stable local row at that position until the completed item replaces it.
+  const projected = messages.map((message) => {
+    const row = pendingById.get(message.id);
+    return row && message.status !== "complete" ? localMessage(row) : message;
+  });
+  const ids = new Set(projected.map((message) => message.id));
   const anchors = new Set([...ids, ...pending.map((row) => `client:${row.id}`)]);
   const insertions = new Map<string | undefined, TranscriptMessage[]>();
   for (const row of pending) {
+    if (ids.has(`client:${row.id}`)) continue;
     // A pruned/reverted anchor cannot conceal an unresolved local submission.
-    const anchor = row.anchor && anchors.has(row.anchor) ? row.anchor : messages.at(-1)?.id;
+    const anchor = row.anchor && anchors.has(row.anchor) ? row.anchor : projected.at(-1)?.id;
     const insertion = insertions.get(anchor) ?? [];
-    insertion.push({
-      id: `client:${row.id}`,
-      role: "user",
-      content: [...(row.images ?? []).map((_, index) => `[Image #${index + 1}]`), row.text]
-        .filter(Boolean)
-        .join("\n\n"),
-      status: row.state === "unknown" ? "error" : "working",
-      deliveryStatus:
-        row.state === "unknown"
-          ? "Delivery unknown · check before resending"
-          : row.state === "accepted"
-            ? "Accepted · waiting for transcript"
-            : row.action === "steer"
-              ? "Steering…"
-              : "Sending…",
-    });
+    insertion.push(localMessage(row));
     insertions.set(anchor, insertion);
   }
   const expand = (rows: TranscriptMessage[]): TranscriptMessage[] =>
     rows.flatMap((message) => [message, ...expand(insertions.get(message.id) ?? [])]);
-  if (!messages.length) return expand(insertions.get(undefined) ?? []);
-  return expand(messages);
+  if (!projected.length) return expand(insertions.get(undefined) ?? []);
+  return expand(projected);
 }
 
 export function optimisticQueue(

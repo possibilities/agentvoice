@@ -65,12 +65,7 @@ test.beforeEach(async ({ page }) => {
 test("focus frames stay hidden while semantic controls remain keyboard operable", async ({
   page,
 }) => {
-  const agentButton = page.getByRole("button", { name: "Agent", exact: true });
-  await agentButton.focus();
-  await expect(agentButton).toHaveCSS("outline-style", "none");
-  await expect(agentButton).toHaveCSS("box-shadow", "none");
-  await page.keyboard.press("Space");
-  await expect(agentButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("group", { name: "Transcript view" })).toHaveCount(0);
 
   const viewport = page.getByRole("region", { name: "Agent transcript" });
   await viewport.focus();
@@ -88,10 +83,7 @@ test("focus frames stay hidden while semantic controls remain keyboard operable"
   await expect(dock).toHaveCSS("border-top-color", restingDivider);
 });
 
-test("transcript text remains visibly selectable and copyable", async ({
-  context,
-  page,
-}) => {
+test("transcript text remains visibly selectable and copyable", async ({ context, page }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const message = page.getByText(needle, { exact: true });
   const beforeSelection = await message.screenshot();
@@ -102,5 +94,4 @@ test("transcript text remains visibly selectable and copyable", async ({
   await page.evaluate(() => navigator.clipboard.writeText("clipboard sentinel"));
   await page.keyboard.press("ControlOrMeta+C");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(selected);
-
 });

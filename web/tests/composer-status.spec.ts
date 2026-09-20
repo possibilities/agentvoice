@@ -19,10 +19,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.route("**/api/live", (route) => route.fulfill({ json: view }));
     await page.goto("/");
     const input = page.getByRole("textbox", { name: "Message Agent" });
-    const send = page.getByRole("button", { name: "Send", exact: true });
     const line = page.locator(".transcript-composer__activity-line");
     const inputGroup = page.locator('[data-slot="input-group"]');
-    await expect(send).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toHaveCount(0);
     await expect.poll(() => inputGroup.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
     await input.fill("Retain this draft through every connection state");
     const metrics = () =>
@@ -38,7 +37,6 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
           opacity: segment.opacity,
         };
       });
-    await expect(send).toBeEnabled();
     const idle = await metrics();
     expect(idle.height).toBeGreaterThanOrEqual(3);
     expect(idle.animation).toBe("none");
@@ -50,13 +48,11 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     expect(working.height).toBe(idle.height);
     expect(working.opacity).toBe("1");
     expect(working.animation === "none").toBe(reducedMotion === "reduce");
-    await expect(send).toBeEnabled();
     await page.screenshot({ path: `test-results/divider-working-${reducedMotion}.png` });
 
     view.agentControls!.active = false;
     view.agentNotice = "Agent transcript is catching up. Input remains available.";
     await expect(page.getByText(view.agentNotice, { exact: true })).toBeVisible();
-    await expect(send).toBeEnabled();
     await expect(line).toHaveAttribute("data-reachable", "true");
     await expect.poll(async () => (await metrics()).color).toBe(idle.color);
     await expect(input).toHaveValue("Retain this draft through every connection state");
@@ -68,7 +64,6 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     view.agentControls!.available = false;
     view.agentControls!.inputUnavailableReason =
       "Agent input is unavailable while the transcript reader reconnects. Your draft is still editable.";
-    await expect(send).toBeDisabled();
     await expect(
       page.getByText(view.agentControls!.inputUnavailableReason, { exact: true }),
     ).toBeVisible();
@@ -87,7 +82,6 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     view.agentControls!.inputUnavailableReason = undefined;
     view.agentNotice = undefined;
     view.agentControls!.active = false;
-    await expect(send).toBeEnabled();
     await expect.poll(async () => (await metrics()).color).toBe(idle.color);
     expect((await metrics()).animation).toBe("none");
     await expect(input).toHaveValue("Retain this draft through every connection state");

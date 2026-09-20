@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   CLIPBOARD_IMAGE_MIME_TYPES,
@@ -7,46 +7,25 @@ import {
   MAX_LOCAL_IMAGES,
 } from "../../../../src/attachment/image-contract";
 import { Button } from "../components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "../components/ui/input-group";
+import { InputGroup, InputGroupTextarea } from "../components/ui/input-group";
 import type { ComposerImage, SaveClipboardImage } from "./composer-images";
 import {
   cacheComposerState,
   composerPageId,
   loadComposerState,
-  type PersistedComposerEditing,
   type PersistedComposerRecovery,
   type PersistedComposerState,
   writeComposerEntryJournal,
   writeComposerState,
 } from "./composer-persistence";
-import { FileReferencePicker } from "./file-reference-picker";
-import {
-  insertFileReferences,
-  type ListReferenceFiles,
-  transferredReferencePaths,
-} from "./file-references";
+import { insertFileReferences, transferredReferencePaths } from "./file-references";
 
-export type TranscriptFollowUpMode = "steer" | "queue";
 type ActionResult = void | Promise<void>;
 
 export interface TranscriptSubmission {
   /** Host-visible identity for optimistic rendering and exact transport reconciliation. */
   clientId: string;
-  mode: "send" | TranscriptFollowUpMode;
+  mode: "send" | "steer";
   images?: ComposerImage[];
 }
 
@@ -86,8 +65,6 @@ export interface TranscriptComposerProps {
   /** Disable actions while retaining a writable draft, for example during reconnect. */
   actionsDisabled?: boolean;
   disabled?: boolean;
-  /** Keep one Send action visible through active and pending host states. */
-  alwaysShowSend?: boolean;
   /** Clear accepted input before awaiting the callback and retain explicit failure recovery. */
   optimisticSubmit?: boolean;
   /** Stable opaque workspace + thread + lane identity for browser draft recovery. */
@@ -96,25 +73,11 @@ export interface TranscriptComposerProps {
   persistenceInstanceId?: string;
   /** Exact client IDs already present in the authoritative transcript. */
   observedSubmissionIds?: readonly string[];
-  /** Defaults to the Codex desktop setting, steer. */
-  followUpMode?: TranscriptFollowUpMode;
-  onFollowUpModeChange?: (mode: TranscriptFollowUpMode) => void;
   onSend?: (text: string, submission: TranscriptSubmission) => ActionResult;
   onSteer?: (text: string, submission: TranscriptSubmission) => ActionResult;
-  onQueue?: (text: string, submission: TranscriptSubmission) => ActionResult;
-  /** Omit to show noninteractive working status instead of Stop. */
-  onInterrupt?: () => ActionResult;
   /** Host-owned FIFO. This component never drains or retries it automatically. */
   queue?: readonly TranscriptQueuedMessage[];
-  onSteerQueued?: (id: string) => ActionResult;
-  onResumeQueued?: (id: string) => ActionResult;
-  /** Save edited text in the existing queue position; never submit a new turn. */
-  onEditQueued?: (id: string, text: string, images?: ComposerImage[]) => ActionResult;
   onRemoveQueued?: (id: string) => ActionResult;
-  /** Pause/exclude this row from host dispatch while its text is in the composer. */
-  onEditingQueuedChange?: (id: string | null) => ActionResult;
-  /** Read-only host file picker; selected paths remain ordinary message text. */
-  listReferenceFiles?: ListReferenceFiles;
   /** Materialize raw clipboard images locally before submitting native localImage paths. */
   saveClipboardImage?: SaveClipboardImage;
   defaultValue?: string;
@@ -138,24 +101,14 @@ function Composer({
   stopping = false,
   actionsDisabled = false,
   disabled = false,
-  alwaysShowSend = false,
   optimisticSubmit = false,
   persistenceScope,
   persistenceInstanceId,
   observedSubmissionIds = EMPTY_SUBMISSION_IDS,
-  followUpMode,
-  onFollowUpModeChange,
   onSend,
   onSteer,
-  onQueue,
-  onInterrupt,
   queue = [],
-  onSteerQueued,
-  onResumeQueued,
-  onEditQueued,
   onRemoveQueued,
-  onEditingQueuedChange,
-  listReferenceFiles,
   saveClipboardImage,
   defaultValue = "",
   placeholder = "Message Agent…",
@@ -171,18 +124,27 @@ function Composer({
   const imageSave = useRef<AbortController | null>(null);
   const [savingImages, setSavingImages] = useState(false);
   const referenceSelection = useRef({ start: 0, end: 0 });
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const locked = useRef(false);
-  const persisted = useRef<PersistedComposerState>(loaded.state);
+  const legacyEditing = loaded.state.editing;
+  const initialState: PersistedComposerState = legacyEditing
+    ? {
+        ...loaded.state,
+        draft: legacyEditing.savedDraft,
+        images: legacyEditing.savedImages ?? [],
+        editing: null,
+        followUpMode: "steer",
+      }
+    : { ...loaded.state, followUpMode: "steer" };
+  const persisted = useRef<PersistedComposerState>(initialState);
   const persistenceTimer = useRef<number | null>(null);
-  const persistenceDirty = useRef(loaded.changed);
-  const initialEditing = loaded.state.editing;
-  const draftRef = useRef(initialEditing?.text ?? loaded.state.draft);
-  const imagesRef = useRef<ComposerImage[]>(initialEditing?.images ?? loaded.state.images ?? []);
+  const persistenceDirty = useRef(
+    loaded.changed || legacyEditing !== null || loaded.state.followUpMode !== "steer",
+  );
+  const draftRef = useRef(initialState.draft);
+  const imagesRef = useRef<ComposerImage[]>(initialState.images ?? []);
   const [images, setImages] = useState(imagesRef.current);
-  const [draft, setDraft] = useState(initialEditing?.text ?? loaded.state.draft);
-  const [localMode, setLocalMode] = useState<TranscriptFollowUpMode>(loaded.state.followUpMode);
+  const [draft, setDraft] = useState(initialState.draft);
   const [operation, setOperation] = useState<string | null>(null);
   const [submissionPending, setSubmissionPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,44 +153,19 @@ function Composer({
   );
   const recoveriesRef = useRef(loaded.state.recoveries);
   const [recoveries, setRecoveries] = useState(loaded.state.recoveries);
-  const editingRef = useRef<PersistedComposerEditing | null>(initialEditing);
-  const [editing, setEditing] = useState<PersistedComposerEditing | null>(initialEditing);
   const observedIdsRef = useRef(new Set(observedSubmissionIds));
-  const mode = followUpMode ?? localMode;
   const unavailable =
     disabled || actionsDisabled || pending || operation !== null || stopping || savingImages;
-  const editedRow = editing ? queue.find((row) => row.id === editing.id) : null;
-  const action = !active ? onSend : mode === "steer" ? onSteer : onQueue;
-  const actionLabel = editing
-    ? "Save queued message"
-    : !active
-      ? "Send"
-      : mode === "steer"
-        ? "Steer"
-        : "Queue";
+  const action = active ? onSteer : onSend;
   const canSubmit =
-    (draft.trim().length > 0 || images.length > 0) &&
-    !unavailable &&
-    (editing ? Boolean(editedRow && !editedRow.disabled && onEditQueued) : Boolean(action));
-  const showStop =
-    !alwaysShowSend && !editing && active && draft.trim().length === 0 && images.length === 0;
+    (draft.trim().length > 0 || images.length > 0) && !unavailable && Boolean(action);
 
   useEffect(() => () => imageSave.current?.abort(), []);
 
   function updateImages(next: ComposerImage[], immediate = true) {
     imagesRef.current = next;
     setImages(next);
-    if (editingRef.current) {
-      editingRef.current = { ...editingRef.current, text: draftRef.current, images: next };
-      setEditing(editingRef.current);
-    }
-    updatePersistence(
-      (current) =>
-        editingRef.current
-          ? { ...current, editing: { ...editingRef.current, text: draftRef.current, images: next } }
-          : { ...current, images: next },
-      immediate,
-    );
+    updatePersistence((current) => ({ ...current, images: next, editing: null }), immediate);
   }
 
   async function pasteImages(files: readonly File[]) {
@@ -249,7 +186,9 @@ function Composer({
     }
     for (const file of files) {
       if (!(CLIPBOARD_IMAGE_MIME_TYPES as readonly string[]).includes(file.type)) {
-        setError("Paste a PNG, JPEG, WebP or GIF image. Use Reference a file for other files.");
+        setError(
+          "Paste a PNG, JPEG, WebP or GIF image. Drop other local files to insert their paths.",
+        );
         return;
       }
       if (file.size === 0 || file.size > MAX_CLIPBOARD_IMAGE_BYTES) {
@@ -312,7 +251,6 @@ function Composer({
     const next = insertFileReferences(draftRef.current, paths, selection.start, selection.end);
     updateDraft(next.text, true);
     setError(null);
-    setPickerOpen(false);
     requestAnimationFrame(() => {
       input.current?.focus();
       input.current?.setSelectionRange(next.caret, next.caret);
@@ -332,7 +270,7 @@ function Composer({
     if (paths.length) insertReferences(paths);
     else
       setError(
-        "This browser did not provide a full local file path. Use Reference a file or paste an absolute path. Paste a clipboard image to attach it instead.",
+        "This browser did not provide a full local file path. Paste an absolute path, or paste a clipboard image to attach it instead.",
       );
   }
 
@@ -431,16 +369,7 @@ function Composer({
   function updateDraft(value: string, immediate = false) {
     draftRef.current = value;
     setDraft(value);
-    updatePersistence(
-      (current) =>
-        editingRef.current
-          ? {
-              ...current,
-              editing: { ...editingRef.current, text: value },
-            }
-          : { ...current, draft: value },
-      immediate,
-    );
+    updatePersistence((current) => ({ ...current, draft: value, editing: null }), immediate);
     if (
       !immediate &&
       !writeComposerEntryJournal(persistenceScope, persisted.current, persistenceInstanceId)
@@ -456,12 +385,6 @@ function Composer({
     recoveriesRef.current = next;
     setRecoveries(next);
     updatePersistence((current) => ({ ...current, recoveries: next }), immediate);
-  }
-
-  function updateEditing(next: PersistedComposerEditing | null, immediate = false) {
-    editingRef.current = next;
-    setEditing(next);
-    updatePersistence((current) => ({ ...current, editing: next }), immediate);
   }
 
   function failureMessage(cause: unknown) {
@@ -560,73 +483,21 @@ function Composer({
     }
   }
 
-  async function finishEditing() {
-    const current = editingRef.current;
-    if (!current) return;
-    await onEditingQueuedChange?.(null);
-    if (!ownsPersistence()) return;
-    updateEditing(null);
-    updateDraft(current.savedDraft, true);
-    updateImages(current.savedImages ?? []);
-    input.current?.focus();
-  }
-
-  function submit(invertMode = false) {
+  function submit() {
     if (!canSubmit) return;
     const text = draft.trim();
-    if (editing && onEditQueued) {
-      const editState = editing;
-      void run(
-        "Saving…",
-        async () => {
-          if (editState.pageId !== composerPageId) {
-            if (!onEditingQueuedChange)
-              throw new Error("Reopen this queued edit before saving it.");
-            await onEditingQueuedChange(editState.id);
-            if (!ownsPersistence()) return;
-            updateEditing({ ...editState, pageId: composerPageId }, true);
-          }
-          await onEditQueued(editState.id, text, imagesRef.current);
-        },
-        finishEditing,
-      );
-      return;
-    }
-    const submitMode = invertMode ? (mode === "steer" ? "queue" : "steer") : mode;
-    const send = !active ? onSend : submitMode === "steer" ? onSteer : onQueue;
+    const send = active ? onSteer : onSend;
     if (!send) return;
     const submission: TranscriptSubmission = {
       clientId: createSubmissionClientId(),
-      mode: active ? submitMode : "send",
+      mode: active ? "steer" : "send",
       ...(images.length ? { images: [...images] } : {}),
     };
     void runSubmission(
-      !active ? "Sending…" : submitMode === "steer" ? "Steering…" : "Queueing…",
+      active ? "Steering…" : "Sending…",
       () => send(text, submission),
       text,
       submission,
-    );
-  }
-
-  function edit(row: TranscriptQueuedMessage) {
-    if (unavailable || row.disabled) return;
-    void run(
-      "Opening edit…",
-      () => onEditingQueuedChange?.(row.id),
-      () => {
-        const next = {
-          id: row.id,
-          text: row.text,
-          images: row.images ?? [],
-          savedImages: editingRef.current?.savedImages ?? imagesRef.current,
-          savedDraft: editingRef.current?.savedDraft ?? draftRef.current,
-          pageId: composerPageId,
-        };
-        updateEditing(next);
-        updateDraft(row.text, true);
-        updateImages(row.images ?? []);
-        input.current?.focus();
-      },
     );
   }
 
@@ -640,10 +511,7 @@ function Composer({
         : undefined;
 
   return (
-    <div
-      className={cn("agentchats-transcript transcript-composer", className)}
-      data-always-show-send={alwaysShowSend || undefined}
-    >
+    <div className={cn("agentchats-transcript transcript-composer", className)}>
       <div
         className="transcript-composer__activity-line"
         data-active={working || undefined}
@@ -670,65 +538,13 @@ function Composer({
                     </p>
                   ) : null}
                   <div className="transcript-queue__actions">
-                    {onSteerQueued ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={
-                          unavailable ||
-                          row.disabled ||
-                          !active ||
-                          row.canSteer === false ||
-                          editing?.id === row.id
-                        }
-                        onClick={() => void run("Steering…", () => onSteerQueued(row.id))}
-                      >
-                        Steer
-                      </Button>
-                    ) : null}
-                    {onResumeQueued && row.pausedReason ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={
-                          unavailable ||
-                          row.disabled ||
-                          row.canResume !== true ||
-                          editing?.id === row.id
-                        }
-                        onClick={() => void run("Resuming…", () => onResumeQueued(row.id))}
-                      >
-                        Resume
-                      </Button>
-                    ) : null}
-                    {onEditQueued ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={unavailable || row.disabled}
-                        onClick={() => edit(row)}
-                      >
-                        Edit
-                      </Button>
-                    ) : null}
                     {onRemoveQueued ? (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         disabled={unavailable || row.disabled}
-                        onClick={() =>
-                          void run(
-                            "Removing…",
-                            () => onRemoveQueued(row.id),
-                            () => {
-                              if (editing?.id === row.id) return finishEditing();
-                            },
-                          )
-                        }
+                        onClick={() => void run("Removing…", () => onRemoveQueued(row.id))}
                       >
                         Remove
                       </Button>
@@ -743,8 +559,7 @@ function Composer({
           aria-label={label}
           data-file-drop={dragging || undefined}
           onDragOver={(event) => {
-            if (!listReferenceFiles || disabled || (operation !== null && !submissionPending))
-              return;
+            if (disabled || (operation !== null && !submissionPending)) return;
             if (
               !event.dataTransfer.types.some((type) =>
                 ["Files", "text/uri-list", "text/plain"].includes(type),
@@ -760,7 +575,6 @@ function Composer({
               setDragging(false);
           }}
           onDrop={(event) => {
-            if (!listReferenceFiles) return;
             setDragging(false);
             if (
               !event.dataTransfer.types.includes("Files") &&
@@ -774,7 +588,7 @@ function Composer({
           onPaste={(event) => {
             if (disabled || (operation !== null && !submissionPending)) return;
             const paths = transferredReferencePaths(event.clipboardData);
-            if (paths.length && listReferenceFiles) {
+            if (paths.length) {
               event.preventDefault();
               acceptTransfer(event.clipboardData);
               return;
@@ -784,7 +598,7 @@ function Composer({
             if (saveClipboardImage) {
               event.preventDefault();
               void pasteImages(files);
-            } else if (listReferenceFiles) {
+            } else {
               event.preventDefault();
               acceptTransfer(event.clipboardData);
             }
@@ -794,7 +608,6 @@ function Composer({
             submit();
           }}
         >
-          {editing ? <p className="transcript-composer__label">Edit queued message</p> : null}
           {imageAttachments(images, true)}
           {savingImages ? (
             <p className="transcript-composer__image-status" role="status">
@@ -812,14 +625,18 @@ function Composer({
               </button>
             </p>
           ) : null}
+          <p className="transcript-composer__instructions" id={`${inputId}-instructions`}>
+            Press Enter to {active ? "steer the current turn" : "send"}. Press Shift+Enter for a new
+            line. Drop local files to insert their paths, or paste images to attach them.
+          </p>
           <InputGroup>
             <InputGroupTextarea
               ref={input}
               id={inputId}
-              aria-label={editing ? "Edit queued message" : label}
-              aria-describedby={
-                error || storageWarning || recoveries.length > 0 ? `${inputId}-error` : undefined
-              }
+              aria-label={label}
+              aria-describedby={`${inputId}-instructions${
+                error || storageWarning || recoveries.length > 0 ? ` ${inputId}-error` : ""
+              }`}
               aria-invalid={Boolean(error || recoveries.length > 0)}
               aria-autocomplete="none"
               autoCapitalize="off"
@@ -840,106 +657,17 @@ function Composer({
               }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-                const invert = active && event.shiftKey && (event.metaKey || event.ctrlKey);
-                if (event.shiftKey && !invert) return;
+                if (event.shiftKey) return;
                 event.preventDefault();
-                submit(invert);
+                submit();
               }}
             />
-            <InputGroupAddon align="block-end">
-              {editing ? (
-                <InputGroupButton
-                  disabled={unavailable}
-                  onClick={() => void run("Closing edit…", finishEditing)}
-                >
-                  Cancel edit
-                </InputGroupButton>
-              ) : onSteer || onQueue ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={<InputGroupButton className="transcript-composer__mode" />}
-                    disabled={unavailable}
-                    aria-label="Follow-up behavior"
-                  >
-                    {mode === "steer" ? "Steer" : "Queue"} while running
-                    <ChevronDownIcon data-icon="inline-end" aria-hidden="true" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    portalClassName="agentchats-transcript"
-                    side="top"
-                    className="transcript-composer__menu"
-                  >
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel>While Agent is running</DropdownMenuLabel>
-                      <DropdownMenuRadioGroup
-                        value={mode}
-                        onValueChange={(value) => {
-                          if (value !== "steer" && value !== "queue") return;
-                          setLocalMode(value);
-                          updatePersistence(
-                            (current) => ({
-                              ...current,
-                              followUpMode: value,
-                            }),
-                            true,
-                          );
-                          onFollowUpModeChange?.(value);
-                        }}
-                      >
-                        <DropdownMenuRadioItem value="steer" disabled={!onSteer} closeOnClick>
-                          Steer current turn
-                        </DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="queue" disabled={!onQueue} closeOnClick>
-                          Queue for next turn
-                        </DropdownMenuRadioItem>
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : null}
-              {listReferenceFiles ? (
-                <InputGroupButton
-                  type="button"
-                  aria-label="Reference a file"
-                  title="Insert a local file path"
-                  disabled={disabled || (operation !== null && !submissionPending)}
-                  onClick={() => {
-                    captureSelection();
-                    setPickerOpen(true);
-                  }}
-                >
-                  <PaperclipIcon aria-hidden="true" />
-                </InputGroupButton>
-              ) : null}
-              <span className="transcript-composer__status" role="status">
-                {stopping && onInterrupt ? "Stopping…" : (operation ?? (pending ? "Sending…" : ""))}
-              </span>
-              {alwaysShowSend ? (
-                <InputGroupButton type="submit" size="sm" variant="default" disabled={!canSubmit}>
-                  <ArrowUpIcon data-icon="inline-start" aria-hidden="true" />
-                  {editing ? "Save queued message" : "Send"}
-                </InputGroupButton>
-              ) : (showStop || stopping) && !onInterrupt ? null : showStop || stopping ? (
-                <InputGroupButton
-                  size="sm"
-                  variant="secondary"
-                  disabled={unavailable || !onInterrupt}
-                  aria-label="Stop Agent"
-                  onClick={() => {
-                    if (onInterrupt) void run("Stopping…", onInterrupt);
-                  }}
-                >
-                  <SquareIcon data-icon="inline-start" aria-hidden="true" />
-                  Stop
-                </InputGroupButton>
-              ) : (
-                <InputGroupButton type="submit" size="sm" variant="default" disabled={!canSubmit}>
-                  <ArrowUpIcon data-icon="inline-start" aria-hidden="true" />
-                  {actionLabel}
-                </InputGroupButton>
-              )}
-            </InputGroupAddon>
           </InputGroup>
+          {operation || pending || stopping ? (
+            <p className="transcript-composer__status" role="status">
+              {stopping ? "Stopping…" : (operation ?? "Sending…")}
+            </p>
+          ) : null}
           {error || storageWarning || recoveries.length > 0 ? (
             <div className="transcript-composer__error" id={`${inputId}-error`}>
               {error ? <p role="alert">{error}</p> : null}
@@ -979,21 +707,12 @@ function Composer({
                       recoveriesRef.current = nextRecoveries;
                       setRecoveries(nextRecoveries);
                       updatePersistence(
-                        (current) =>
-                          editingRef.current
-                            ? {
-                                ...current,
-                                editing: {
-                                  ...editingRef.current,
-                                  text: nextDraft,
-                                },
-                                recoveries: nextRecoveries,
-                              }
-                            : {
-                                ...current,
-                                draft: nextDraft,
-                                recoveries: nextRecoveries,
-                              },
+                        (current) => ({
+                          ...current,
+                          draft: nextDraft,
+                          editing: null,
+                          recoveries: nextRecoveries,
+                        }),
                         true,
                       );
                       input.current?.focus();
@@ -1021,16 +740,6 @@ function Composer({
           ) : null}
         </form>
       </div>
-      {pickerOpen && listReferenceFiles ? (
-        <FileReferencePicker
-          listFiles={listReferenceFiles}
-          onSelect={(path) => insertReferences([path])}
-          onClose={() => {
-            setPickerOpen(false);
-            requestAnimationFrame(() => input.current?.focus());
-          }}
-        />
-      ) : null}
     </div>
   );
 }

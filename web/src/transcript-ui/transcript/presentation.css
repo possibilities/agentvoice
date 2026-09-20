@@ -93,8 +93,19 @@
   font-weight: 400;
 }
 .message-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--text);
   font-weight: 500;
+}
+.voice-message__source {
+  display: inline-flex;
+  color: var(--muted);
+}
+.voice-message__source svg {
+  width: 14px;
+  height: 14px;
 }
 .system-event-card {
   margin-inline: 16px;
@@ -196,6 +207,18 @@
   font: 13px var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.message-pending-images {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.message-pending-images svg {
+  width: 14px;
+  height: 14px;
 }
 [data-slot="message-header"] time {
   margin-left: auto;
@@ -930,13 +953,6 @@
   background: var(--field);
   box-shadow: none;
 }
-:is(.transcript-composer, :scope.transcript-composer) [data-slot="input-group-addon"] {
-  flex-wrap: wrap;
-  padding: 0 12px 8px;
-}
-:is(.transcript-composer, :scope.transcript-composer) [data-slot="input-group-addon"] > :last-child {
-  margin-left: auto;
-}
 :is(.transcript-composer, :scope.transcript-composer) textarea:focus-visible {
   outline: none;
 }
@@ -945,12 +961,20 @@
   box-shadow: 0 0 0 1px var(--accent);
 }
 .transcript-composer__status {
-  margin-left: auto;
+  margin: 0;
   color: var(--muted);
   font-size: 13px;
 }
-.transcript-composer__mode {
-  margin-inline-start: -7px;
+.transcript-composer__instructions {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
 }
 .transcript-composer__error,
 .transcript-queue__reason {
@@ -989,10 +1013,6 @@
 }
 .transcript-queue__reason {
   color: var(--muted);
-}
-.transcript-composer__menu {
-  width: max-content;
-  max-width: calc(100vw - 32px);
 }
 .transcript-queue {
   margin-bottom: 12px;
@@ -1054,7 +1074,7 @@
   padding-block: 6px;
 }
 
-/* Respond to the lane, including two agentvoice lanes in a wide host. */
+/* Respond to the host transcript width. */
 @container transcript (max-width: 800px) {
   .chat-transcript { --transcript-inline-padding: 20px; }
   .transcript-composer__content { padding-inline: 20px; }
@@ -1229,40 +1249,6 @@
 }
 
 .transcript-composer form[data-file-drop] { outline: 2px dashed var(--foreground); outline-offset: 6px; }
-.transcript-file-picker {
-  position: fixed;
-  inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
-  width: min(620px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-  max-height: min(720px, calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
-  margin: auto;
-  padding: 20px;
-  overflow: auto;
-  color: var(--foreground);
-  background: var(--background);
-  border: 1px solid var(--border);
-  font: inherit;
-}
-.transcript-file-picker::backdrop { background: #0008; }
-.transcript-file-picker header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.transcript-file-picker h2 { font-size: 16px; font-weight: 600; }
-.transcript-file-picker p { margin-block: 12px; font-size: 13px; }
-.transcript-file-picker button { min-width: 44px; min-height: 44px; padding: 8px; cursor: pointer; }
-.transcript-file-picker button:disabled { opacity: .4; cursor: default; }
-.transcript-file-picker button:hover:not(:disabled) { background: var(--accent-surface); }
-.transcript-file-picker button:focus-visible, .transcript-file-picker input:focus-visible { outline: 2px solid var(--foreground); outline-offset: -2px; }
-.transcript-file-picker svg { width: 18px; height: 18px; flex-shrink: 0; }
-.transcript-file-picker label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; }
-.transcript-file-picker input { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--border); font: inherit; font-size: 16px; }
-.transcript-file-picker__location { display: flex; align-items: end; gap: 8px; margin-top: 16px; }
-.transcript-file-picker__location label { flex: 1; }
-.transcript-file-picker__filter { margin-block: 12px; }
-.transcript-file-picker__entries { min-height: 120px; max-height: 340px; overflow-y: auto; overscroll-behavior: contain; }
-.transcript-file-picker__entries ul { margin: 0; padding: 0; list-style: none; }
-.transcript-file-picker__entries li button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
-.transcript-file-picker__entries li button > span:first-of-type { min-width: 0; overflow-wrap: anywhere; flex: 1; }
-.transcript-file-picker__kind { font-size: 12px; white-space: nowrap; color: var(--muted-foreground); }
-.transcript-file-picker footer { display: flex; justify-content: end; margin-top: 12px; }
-
 .transcript-composer__images {
   display: flex;
   flex-wrap: wrap;

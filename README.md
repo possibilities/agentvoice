@@ -15,8 +15,9 @@ macOS service installation, private-network pairing, and Android development.
 
 ## What it provides
 
-- Bare `agentvoice` prints command help. The AgentVoice web UI presents the
-  persistent Agent and Voice transcripts with typed Agent input.
+- Bare `agentvoice` prints command help. The AgentVoice web UI presents one
+  persistent Agent transcript with keyboard-submitted Agent input and projected
+  `Via Voice` Human messages.
 - `agentvoice client` opens only the pointer voice frontend.
 - `agentvoice phone` serves a capability-bearing loopback page whose browser owns
   microphone capture, playback, and WebRTC.

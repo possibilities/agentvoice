@@ -4,7 +4,6 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -18,29 +17,15 @@ import {
   optimisticMessages,
   optimisticQueue,
 } from "./optimistic.ts";
-import { type PanePreference, readPanePreference, savePanePreference } from "./pane-preferences.ts";
 import { readLiveView } from "./read-live-view.ts";
 import { reconcileView, transcriptPresentationView } from "./reconcile-view.ts";
 import type { SaveClipboardImage } from "./transcript-ui/transcript/composer-images";
-import type { ListReferenceFiles } from "./transcript-ui/transcript/file-references";
 import {
   DocumentViewerProvider,
   Transcript,
   TranscriptComposer,
 } from "./transcript-ui/transcript/react.ts";
 import type { AgentControlsView, LiveView } from "./types.ts";
-
-const listReferenceFiles: ListReferenceFiles = async (request, signal) => {
-  const response = await fetch("/api/files", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-    signal,
-  });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? "Files could not be listed.");
-  return result;
-};
 
 const copy = {
   offline: "No agent voice server to connect to.",
@@ -62,25 +47,6 @@ function focusComposerFromDock(event: MouseEvent<HTMLDivElement>) {
 
 export function App() {
   const persistenceInstanceId = kioskPersistenceInstanceId();
-  const [panePreference, setPanePreference] = useState(() =>
-    readPanePreference(persistenceInstanceId),
-  );
-  const [preferenceSaved, setPreferenceSaved] = useState(true);
-  const choosePane = (next: PanePreference) => {
-    setPreferenceSaved(savePanePreference(next, persistenceInstanceId));
-    setPanePreference(next);
-  };
-  const agentDock = useRef<HTMLDivElement>(null);
-  const [dockHeight, setDockHeight] = useState(0);
-  useLayoutEffect(() => {
-    const dock = agentDock.current;
-    if (!dock) return;
-    const measure = () => setDockHeight(dock.getBoundingClientRect().height);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(dock);
-    return () => observer.disconnect();
-  }, []);
   const [readRevision, setReadRevision] = useState(0);
   const [view, setView] = useState<LiveView>({
     phase: "connecting",
@@ -165,11 +131,9 @@ export function App() {
 
   const hasSession = !!view.persistenceScope && !!view.agentControls;
   const holding =
-    (hasSession && (view.agentHistoryLoading || view.voiceHistoryLoading)) ||
-    (!hasSession && view.agent.length === 0 && view.voice.length === 0);
-  const statusText = !preferenceSaved
-    ? "View saved for this visit only."
-    : holding && hasSession
+    (hasSession && view.agentHistoryLoading) || (!hasSession && view.agent.length === 0);
+  const statusText =
+    holding && hasSession
       ? "Loading conversation…"
       : view.phase === "live" || view.phase === "detached"
         ? ""
@@ -186,7 +150,9 @@ export function App() {
     [transcriptView.agent, localSubmissions],
   );
   const observedSubmissionKey = JSON.stringify([
-    ...view.agent.filter((row) => row.id.startsWith("client:")).map((row) => row.id.slice(7)),
+    ...view.agent
+      .filter((row) => row.id.startsWith("client:") && row.status === "complete")
+      .map((row) => row.id.slice(7)),
     ...(view.agentControls?.queue.map((row) => row.id) ?? []),
   ]);
   // Streaming text must not invalidate the input boundary when exact acknowledgments are unchanged.
@@ -213,73 +179,42 @@ export function App() {
   }, [transcriptView, view.id, view.agentControls]);
   return (
     <DocumentViewerProvider load={loadDocument} resetKey={view.id}>
-      <main aria-label="AgentVoice live transcripts" className="live-view">
-        <header className="app-header">
-          <h1 className="app-brand">AgentVoice</h1>
-          <p className="app-status" data-visible={statusText ? true : undefined} role="status">
-            {statusText}
-          </p>
-          <fieldset className="pane-switch" aria-label="Transcript view">
-            {(["agent", "voice", "both"] as const).map((mode) => (
-              <button
-                className="pane-switch-button"
-                key={mode}
-                type="button"
-                aria-pressed={panePreference === mode}
-                onClick={() => choosePane(mode)}
-              >
-                {mode === "agent" ? "Agent" : mode === "voice" ? "Voice" : "Both"}
-              </button>
-            ))}
-          </fieldset>
-        </header>
-        <div className="dual-pane" data-panes={panePreference} hidden={!!holding}>
-          {(["agent", "voice"] as const).map((lane) => (
-            <section
-              className="lane"
-              key={lane}
-              data-lane={lane}
-              data-concealed={(panePreference !== "both" && panePreference !== lane) || undefined}
-              inert={panePreference !== "both" && panePreference !== lane}
-              aria-hidden={(panePreference !== "both" && panePreference !== lane) || undefined}
-              aria-label={lane === "voice" ? "Voice" : "Agent"}
-            >
-              <TranscriptLane
-                lane={lane}
-                viewId={transcriptView.id}
-                phase={transcriptView.phase}
-                notice={transcriptView[`${lane}Notice`]}
-                messages={lane === "agent" ? displayedAgent : transcriptView.voice}
-                holding={!!holding}
-              />
-              <div
-                ref={lane === "agent" ? agentDock : undefined}
-                className={lane === "agent" ? "agent-dock" : "voice-dock"}
-                onClick={lane === "agent" ? focusComposerFromDock : undefined}
-                style={lane === "voice" ? { height: dockHeight } : undefined}
-                aria-hidden={lane === "voice" ? true : undefined}
-                hidden={lane === "voice" && (panePreference !== "both" || dockHeight === 0)}
-              >
-                {lane === "agent" && displayedControls ? (
-                  <AgentInput
-                    viewId={view.id}
-                    persistenceScope={view.persistenceScope}
-                    persistenceInstanceId={persistenceInstanceId}
-                    observedSubmissionIds={observedSubmissionIds}
-                    controls={displayedControls}
-                    disabled={
-                      (view.phase !== "live" && view.phase !== "detached") ||
-                      !displayedControls.available
-                    }
-                    onAccepted={commandAccepted}
-                    onBegin={beginSubmission}
-                    onSettle={settleSubmission}
-                    isObserved={submissionObserved}
-                  />
-                ) : null}
-              </div>
-            </section>
-          ))}
+      <main aria-label="Live Agent transcript" className="live-view">
+        <div className="transcript-pane">
+          {statusText ? (
+            <p className="transcript-status" role="status">
+              {statusText}
+            </p>
+          ) : null}
+          <section className="lane" data-lane="agent" aria-label="Agent" hidden={!!holding}>
+            <TranscriptLane
+              viewId={transcriptView.id}
+              phase={transcriptView.phase}
+              notice={transcriptView.agentNotice}
+              messages={displayedAgent}
+              holding={!!holding}
+            />
+            {/* biome-ignore lint/a11y: Blank dock clicks focus the native textarea; keyboard users focus it directly. */}
+            <div className="agent-dock" onClick={focusComposerFromDock}>
+              {displayedControls ? (
+                <AgentInput
+                  viewId={view.id}
+                  persistenceScope={view.persistenceScope}
+                  persistenceInstanceId={persistenceInstanceId}
+                  observedSubmissionIds={observedSubmissionIds}
+                  controls={displayedControls}
+                  disabled={
+                    (view.phase !== "live" && view.phase !== "detached") ||
+                    !displayedControls.available
+                  }
+                  onAccepted={commandAccepted}
+                  onBegin={beginSubmission}
+                  onSettle={settleSubmission}
+                  isObserved={submissionObserved}
+                />
+              ) : null}
+            </div>
+          </section>
         </div>
       </main>
     </DocumentViewerProvider>
@@ -287,14 +222,12 @@ export function App() {
 }
 
 const TranscriptLane = memo(function TranscriptLane({
-  lane,
   viewId,
   phase,
   notice,
   messages,
   holding,
 }: {
-  lane: "agent" | "voice";
   viewId: string;
   phase: LiveView["phase"];
   notice?: string;
@@ -305,13 +238,13 @@ const TranscriptLane = memo(function TranscriptLane({
   return (
     <div className="transcript-lane">
       <Transcript
-        transcriptId={`${viewId}:${lane}`}
+        transcriptId={`${viewId}:agent`}
         messages={messages}
-        // Reveal both initial batches at the end; later refreshes retain each lane's scroller.
+        // Reveal the initial Agent batch atomically; later refreshes retain the scroller.
         loading={!!holding}
         windowed
         showJumpToLatest
-        aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
+        aria-label="Agent transcript"
         header={
           notice && !empty ? (
             <p className="transcript-notice" role="status">
@@ -323,7 +256,7 @@ const TranscriptLane = memo(function TranscriptLane({
       {empty ? (
         <div className="transcript-empty">
           <div className="transcript-empty__copy">
-            <h2>{lane === "voice" ? "No voice text yet" : "No agent messages yet"}</h2>
+            <h2>No agent messages yet</h2>
           </div>
         </div>
       ) : null}
@@ -453,8 +386,6 @@ const AgentInput = memo(function AgentInput({
         persistenceInstanceId={persistenceInstanceId}
         observedSubmissionIds={observedSubmissionIds}
         saveClipboardImage={saveClipboardImage}
-        listReferenceFiles={listReferenceFiles}
-        alwaysShowSend
         optimisticSubmit
         reachable={!disabled}
         active={controls.active}
@@ -466,12 +397,7 @@ const AgentInput = memo(function AgentInput({
         queue={controls.queue}
         onSend={(text, submission) => agentCommand({ action: "send", text }, submission)}
         onSteer={(text, submission) => agentCommand({ action: "steer", text }, submission)}
-        onQueue={(text, submission) => agentCommand({ action: "queue", text }, submission)}
-        onSteerQueued={(id) => agentCommand({ action: "steerQueued", id })}
-        onResumeQueued={(id) => agentCommand({ action: "resume", id })}
         onRemoveQueued={(id) => agentCommand({ action: "remove", id })}
-        onEditQueued={(id, text, images) => agentCommand({ action: "edit", id, text, images })}
-        onEditingQueuedChange={(id) => agentCommand({ action: "editing", id })}
       />
     </>
   );

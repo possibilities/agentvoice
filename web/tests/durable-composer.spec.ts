@@ -27,11 +27,10 @@ test("detached sessions retain interactive drafts while unavailable sessions dis
   await input.fill("Unsent draft before reconnect");
   view.phase = "detached";
   view.agentControls!.available = true;
-  await expect(page.locator(".app-status")).toHaveText("");
-  await expect(page.locator(".app-status")).not.toHaveAttribute("data-visible");
+  await expect(page.locator(".transcript-status")).toHaveCount(0);
   await expect(page.getByText("Existing history remains readable.", { exact: true })).toBeVisible();
   await expect(input).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toHaveCount(0);
   await input.fill("Typed while detached 日本語");
   view.agent.push({
     id: "detached-native-work",
@@ -48,14 +47,14 @@ test("detached sessions retain interactive drafts while unavailable sessions dis
   await expect(
     page.getByText(view.agentControls!.inputUnavailableReason, { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(input).toHaveValue("Typed while detached 日本語");
+  await input.press("Enter");
   await expect(input).toHaveValue("Typed while detached 日本語");
   await page.reload();
   await expect(input).toHaveValue("Typed while detached 日本語");
   view.phase = "live";
   view.agentControls!.available = true;
   view.agentControls!.inputUnavailableReason = undefined;
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await expect(input).toHaveValue("Typed while detached 日本語");
 });
 
@@ -100,7 +99,7 @@ test("reload preserves pending submitted text separately from the next draft and
   await page.goto("/");
   const input = page.getByRole("textbox", { name: "Message Agent" });
   await input.fill("Submitted text to recover");
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await input.press("Enter");
   await expect(input).toHaveValue("");
   await input.fill("Independent next draft");
   await expect.poll(() => Boolean(rejectSubmission)).toBe(true);
@@ -140,7 +139,7 @@ test("user fence text remains visible in native history and optimistic messages"
   const input = page.getByRole("textbox", { name: "Message Agent" });
   const conventional = "```text\nConventional fenced body remains readable.\n```";
   await input.fill(conventional);
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await input.press("Enter");
   await expect(transcript).toContainText("Conventional fenced body remains readable.");
   await page.screenshot({ path: "test-results/durable-fenced-message.png", fullPage: true });
 });

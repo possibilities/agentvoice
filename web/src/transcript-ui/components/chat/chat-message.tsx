@@ -1,3 +1,4 @@
+import { ImageIcon, MicIcon } from "lucide-react";
 import { memo } from "react";
 import { FileChangeMessage } from "@/components/chat/file-change-message";
 import { MessageBody } from "@/components/chat/message-body";
@@ -25,7 +26,14 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Mes
     <MessageRow align="start" data-role={message.role}>
       <MessageContent className={isVoiceHandoff ? "voice-message" : undefined}>
         <MessageHeader>
-          <span className="message-author">{isUser ? "Human" : "Agent"}</span>
+          <span className="message-author">
+            {isUser ? "Human" : "Agent"}
+            {isVoiceHandoff ? (
+              <span className="voice-message__source" role="img" aria-label="Via Voice">
+                <MicIcon aria-hidden="true" />
+              </span>
+            ) : null}
+          </span>
           {isUser && message.deliveryStatus ? (
             <span className="message-delivery-status" role="status">
               {message.deliveryStatus}
@@ -39,6 +47,14 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Mes
         </MessageHeader>
         <Bubble align="start" variant={isUser ? "secondary" : "ghost"}>
           <BubbleContent>
+            {message.pendingImageCount ? (
+              <p className="message-pending-images">
+                <ImageIcon aria-hidden="true" />
+                {message.pendingImageCount === 1
+                  ? "1 image attached"
+                  : `${message.pendingImageCount} images attached`}
+              </p>
+            ) : null}
             <MessageBody message={message} />
           </BubbleContent>
         </Bubble>
