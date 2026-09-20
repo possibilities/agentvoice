@@ -8,6 +8,8 @@ as ordinary Human messages. A compact microphone button immediately beside `Huma
 opens the complete details without a tooltip or duplicate visible source label.
 Voice-originated and typed Human rows retain the same existing secondary bubble
 chrome; only the bespoke synthetic-event card layer is retired.
+Human, Agent, and generic Tool call bodies fill the available transcript column;
+the established outer column and responsive page gutters remain in place.
 The composer has no visible Send button or follow-up selector: Enter sends while idle,
 Enter steers while Agent is working, and Shift+Enter inserts a new line. Clipboard images become
 numbered removable local-image attachments (four per message, 10 MiB each); ordinary

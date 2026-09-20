@@ -32,7 +32,6 @@
   --ring: var(--accent);
   --radius: 0.25rem;
   --transcript-column: 1120px;
-  --transcript-measure: 80ch;
   --sidebar: var(--field);
   --sidebar-foreground: var(--text);
   --sidebar-primary: var(--accent);

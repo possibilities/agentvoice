@@ -150,10 +150,6 @@
   color: var(--text);
   overflow-wrap: anywhere;
 }
-/* Prose keeps a terminal-sized measure; code, tables and diffs use the column. */
-.markdown-content > :where(p, ul, ol, blockquote) {
-  max-width: var(--transcript-measure);
-}
 .markdown-content > :first-child {
   margin-top: 0;
 }
@@ -866,7 +862,6 @@
   font-size: 13px;
 }
 .transcript-presentation__body {
-  max-width: var(--transcript-measure);
   white-space: pre-wrap;
 }
 .transcript-presentation__trigger {

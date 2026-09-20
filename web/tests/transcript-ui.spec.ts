@@ -11,6 +11,77 @@ test("compiled transcript styles do not reset the host", async ({ page }) => {
   await expect(marker).toHaveCSS("font-family", "serif");
 });
 
+test("Human, Agent and generic Tool bodies fill the wide transcript column", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.locator("main").evaluate((element) => {
+    element.style.height = "950px";
+  });
+  await page.evaluate(() => {
+    (
+      window as unknown as Window & {
+        transcriptFixture: { setMessages(messages: unknown[]): void };
+      }
+    ).transcriptFixture.setMessages([
+      {
+        id: "wide-human",
+        role: "user",
+        status: "complete",
+        content: `Human ${"prose across the available transcript width. ".repeat(8)}`,
+      },
+      {
+        id: "wide-agent",
+        role: "assistant",
+        status: "complete",
+        content: `Agent ${"prose across the available transcript width. ".repeat(8)}`,
+      },
+      {
+        id: "wide-tool",
+        role: "tool",
+        status: "complete",
+        content: "",
+        toolActivity: {
+          name: "Command",
+          detail: "wide output",
+          state: "complete",
+          sections: [
+            {
+              label: "Output",
+              content: `Tool ${"content across the available transcript width. ".repeat(8)}`,
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  const human = page.locator('[data-slot="message"][data-role="user"] .markdown-content p');
+  const agent = page.locator('[data-slot="message"][data-role="assistant"] .markdown-content p');
+  const tool = page.locator('.tool-disclosure[data-transcript-type="tool-call"]');
+  await tool.getByRole("button").click();
+  const output = tool.getByLabel("Output", { exact: true });
+
+  for (const body of [human, agent, output]) {
+    const geometry = await body.evaluate((element) => {
+      const container = element.closest(
+        element.matches("pre") ? ".tool-detail" : ".markdown-content",
+      );
+      if (!container) throw new Error("Missing transcript body container");
+      return {
+        width: element.getBoundingClientRect().width,
+        available: container.getBoundingClientRect().width,
+      };
+    });
+    expect(geometry.width).toBeGreaterThan(900);
+    expect(Math.abs(geometry.available - geometry.width)).toBeLessThan(2);
+  }
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: "test-results/full-width-transcript.png", fullPage: true });
+});
+
 test("windowing keeps a bounded DOM for a 2,000-message transcript", async ({ page }) => {
   await page.evaluate(() => {
     const host = (

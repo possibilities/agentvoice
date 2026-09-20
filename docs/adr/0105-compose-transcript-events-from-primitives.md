@@ -17,6 +17,11 @@ status, and unknown system evidence. Specialized data such as file attachments a
 lazy Pierre diffs may render inside that disclosure; no event receives a bespoke
 top-level shell or special compaction treatment.
 
+Human, Agent, and Tool call bodies use the full width available inside the existing
+transcript column. The outer column and responsive page gutters remain the only
+reading-width boundary; code, tables, diffs, and long tokens retain their bounded
+overflow and wrapping behavior.
+
 Remove the system-card registry, routing card, file-change card, consecutive
 activity-group shell, their event-specific CSS, and their presentation tests.
 Routing rollup identity and effective-context calculation remain, but the result
