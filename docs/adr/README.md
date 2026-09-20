@@ -161,3 +161,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0098: Explicit saved context-window edits](0098-edit-saved-role-context-window.md)
 - [0099: Retire live manager routing orientation](0099-retire-live-manager-routing-orientation.md) — accepted; removes routing polling, publication, native injection and the fresh query while preserving historical transcript cards and receipts.
 - [0100: Export authoritative current-turn timing](0100-export-authoritative-turn-timing.md) — accepted; event protocol 3 and `threads --json` version 4 carry optional native start and terminal timestamps without observation-time guesses.
+
+- [0101: Export requested exact historical turn metadata](0101-export-exact-bound-turn-timing.md) — accepted; v5 adds bounded metadata-only lookups for exact root/thread/turn targets.

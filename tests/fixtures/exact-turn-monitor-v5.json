@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 5,
+  "observedAt": "2026-09-20T12:00:00.000Z",
+  "monitor": {
+    "instanceId": "controller-after-restart",
+    "generation": 1,
+    "sequence": 10,
+    "rootThreadId": "root-agentvoice",
+    "nativeSessionId": "root-agentvoice",
+    "phase": "ready",
+    "workspace": "/fixture",
+    "inventory": "ready",
+    "historyCoverage": "complete",
+    "threads": [
+      {
+        "id": "root-agentvoice",
+        "parentThreadId": null,
+        "name": null,
+        "status": "active",
+        "activeFlags": [],
+        "turn": null,
+        "model": "gpt-6-astra",
+        "effort": "high",
+        "nickname": null,
+        "parentage": {
+          "state": "root",
+          "sources": ["live_inventory"]
+        },
+        "collaborationIdentity": {
+          "state": "root",
+          "sources": ["live_inventory"]
+        }
+      }
+    ],
+    "exactTurns": [
+      {
+        "rootThreadId": "root-agentvoice",
+        "threadId": "thread-research",
+        "turnId": "turn-thread-research",
+        "state": "observed",
+        "status": "completed",
+        "startedAt": 1789901900,
+        "completedAt": 1789902000
+      }
+    ],
+    "missingSettings": 0
+  }
+}

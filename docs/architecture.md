@@ -12,7 +12,9 @@ owns the current source map and recording/attachment implementation guidance.
   export for independent metadata consumers. A fenced read combines the live
   inventory with persisted native descendant pages and reports per-row parentage
   provenance or missing/conflicting evidence. Optional current-turn timing comes
-  only from native turn records. It never infers semantic Work or an exact
+  only from native turn records. V5 additionally resolves bounded caller-supplied
+  exact historical turn identities through authorized metadata pages (ADR 0101).
+  It never infers semantic Work or an exact
   receiving turn. AgentHUD owns its durable Work and UI in a separate
   repository, with no cross-checkout imports or source ownership here. See
   [ADRs 0056](adr/0056-independent-agenthud.md) and

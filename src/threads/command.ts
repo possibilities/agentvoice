@@ -1,4 +1,5 @@
 import { parseArgs, parseMcpConfigCommand, UsageError } from "../main.ts";
+import { parseTimingTargets } from "./exact-turns.ts";
 import { exportThreadMonitor } from "./export.ts";
 import { discoverThreadMonitor, formatThreadMonitor } from "./monitor.ts";
 
@@ -21,15 +22,19 @@ export async function runThreadsCommand(
       });
     });
   const args = parseArgs(argv, {
-    value: new Set(["--workspace", "--thread"]),
+    value: new Set(["--workspace", "--thread", "--timing-targets"]),
     bool: new Set(["--help", "--json"]),
   });
   if (args.help) {
     await write(
-      "Usage: agentvoice threads [--workspace <dir>] [--thread <root-id>] [--json]\nShow loaded and persisted native descendant threads, with children indented.\nMonitor with: watch -n 1 agentvoice threads\n--json exports versioned metadata with exact observed identity and parentage diagnostics; no socket or credential fields.\n",
+      "Usage: agentvoice threads [--workspace <dir>] [--thread <root-id>] [--json] [--timing-targets <json>]\nShow loaded and persisted native descendant threads, with children indented.\nMonitor with: watch -n 1 agentvoice threads\n--json exports versioned metadata with exact observed identity and parentage diagnostics; no socket or credential fields.\n--timing-targets requests at most 128 exact root/thread/turn metadata lookups (64 KiB JSON); unresolved reads are explicit.\n",
     );
     return 0;
   }
+  const timingText = args.values["timing-targets"];
+  if (timingText !== undefined && !argv.includes("--json"))
+    throw new UsageError("--timing-targets requires --json");
+  const timingTargets = timingText === undefined ? [] : parseTimingTargets(timingText);
   const threadId = args.values["thread"];
   if (threadId !== undefined && !threadId.trim())
     throw new UsageError("--thread requires a non-empty root id");
@@ -41,6 +46,7 @@ export async function runThreadsCommand(
       stateDir,
       selection && !selection.help ? selection.workspace : undefined,
       threadId,
+      timingTargets,
     );
     await write(
       argv.includes("--json")

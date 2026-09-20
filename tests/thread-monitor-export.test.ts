@@ -44,8 +44,8 @@ test("JSON command exports versioned exact metadata and excludes incidental priv
     }),
   ).toBe(0);
   const exported = threadMonitorExportSchema.parse(JSON.parse(output));
-  expect(exported.schemaVersion).toBe(4);
-  expect(exported.monitor).toEqual(monitor as typeof exported.monitor);
+  expect(exported.schemaVersion).toBe(5);
+  expect(exported.monitor).toEqual({ ...monitor, exactTurns: [] } as typeof exported.monitor);
   expect(output).not.toContain("secret");
   expect(output).not.toContain("socket");
 });
@@ -64,7 +64,7 @@ test("command waits for its writer before reporting a complete export", async ()
   expect(await result).toBe(0);
   expect(released).toBe(true);
   const exported = threadMonitorExportSchema.parse(JSON.parse(output));
-  expect(exported.monitor).toEqual(monitor as typeof exported.monitor);
+  expect(exported.monitor).toEqual({ ...monitor, exactTurns: [] } as typeof exported.monitor);
 });
 test("JSON observation failure exports unavailable and exits nonzero without leaking diagnostics", async () => {
   let output = "";
@@ -82,6 +82,7 @@ test("JSON observation failure exports unavailable and exits nonzero without lea
     phase: "unavailable",
     inventory: "unavailable",
     historyCoverage: "unavailable",
+    exactTurns: [],
     threads: [],
     missingSettings: 0,
   });
@@ -238,4 +239,25 @@ test("oversized escaped JSON is rejected and command returns bounded unavailable
   expect(JSON.parse(output).monitor.inventory).toBe("unavailable");
   expect(JSON.parse(output).monitor.threads).toEqual([]);
   expect(Buffer.byteLength(output)).toBeLessThan(1024 * 1024);
+});
+
+test("v5 shared fixture freezes the independent consumer metadata contract", async () => {
+  const fixture = await Bun.file(
+    new URL("./fixtures/exact-turn-monitor-v5.json", import.meta.url),
+  ).json();
+  expect(exportThreadMonitor(fixture.monitor, fixture.observedAt)).toEqual(fixture);
+  const target = { rootThreadId: "root", threadId: "worker", turnId: "bound-turn" };
+  let received: unknown;
+  await runThreadsCommand(
+    ["--json", "--timing-targets", JSON.stringify([target])],
+    "/fixture/state",
+    {
+      observe: async (_state, _workspace, _root, targets) => {
+        received = targets;
+        return monitor;
+      },
+      write: () => {},
+    },
+  );
+  expect(received).toEqual([target]);
 });

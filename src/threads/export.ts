@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { canonicalAgentPathSchema } from "../events/conversation.ts";
+import { exactTurnsSchema } from "./exact-turns.ts";
 import type { ThreadMonitor } from "./monitor.ts";
 
 /** Public metadata contract for independent read-only clients; never a socket descriptor. */
-export const THREAD_MONITOR_EXPORT_VERSION = 4;
+export const THREAD_MONITOR_EXPORT_VERSION = 5;
 export const THREAD_MONITOR_EXPORT_MAX_BYTES = 1024 * 1024;
 const MAX_THREADS = 256;
 const identity = z
@@ -100,11 +101,20 @@ const monitorSchema = z
     workspace: z.string().min(1).max(4096).optional(),
     inventory: z.enum(["pending", "ready", "incomplete", "unavailable"]),
     historyCoverage: z.enum(["complete", "partial", "unavailable"]),
+    exactTurns: exactTurnsSchema,
     threads: z.array(exportedThreadSchema).max(MAX_THREADS),
     missingSettings: z.number().int().min(0).max(MAX_THREADS),
   })
   .strict()
   .superRefine((monitor, ctx) => {
+    if (
+      monitor.exactTurns.some(
+        (row) =>
+          row.state === "observed" &&
+          (row.rootThreadId !== monitor.rootThreadId || monitor.inventory === "unavailable"),
+      )
+    )
+      ctx.addIssue({ code: "custom", message: "Exact timing requires its observed root" });
     if (
       monitor.inventory !== "unavailable" &&
       [
@@ -237,6 +247,7 @@ export function exportThreadMonitor(
         monitor.inventory === "unavailable"
           ? "unavailable"
           : (monitor.historyCoverage ?? "unavailable"),
+      exactTurns: monitor.inventory === "unavailable" ? [] : (monitor.exactTurns ?? []),
       threads,
       missingSettings: threads.filter((thread) => thread.model == null || thread.effort == null)
         .length,

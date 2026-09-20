@@ -10,6 +10,7 @@ import { eventSnapshotSchema } from "../events/schema.ts";
 import { eventSocketPath } from "../events/socket.ts";
 import { discoverServer } from "../frontend/discovery.ts";
 import { ControlSocket, SocketFailure } from "../ipc/control-client.ts";
+import { type ExactTurn, readExactTurns, type TimingTarget } from "./exact-turns.ts";
 
 export type ParentageSource = "live_inventory" | "native_history";
 export type NativeParentage =
@@ -46,6 +47,7 @@ export type ThreadMonitor = {
   historyCoverage?: "complete" | "partial" | "unavailable";
   threads: ThreadRow[];
   missingSettings: number;
+  exactTurns?: ExactTurn[];
 };
 type Reader = Pick<ControlSocket, "request">;
 
@@ -443,6 +445,7 @@ export async function readThreadMonitor(
   client: Reader,
   expected: { instanceId: string; workspace: string; threadId: string },
   budgetMs = 12_000,
+  timingTargets: readonly TimingTarget[] = [],
 ): Promise<ThreadMonitor> {
   const before = eventSnapshotSchema.parse(await client.request("state.get", {}));
   if (
@@ -451,6 +454,7 @@ export async function readThreadMonitor(
     before.runtime.mainThreadId !== expected.threadId
   )
     throw new Error("AgentVoice call changed during discovery; retry");
+  const readDeadline = Date.now() + Math.max(0, budgetMs);
   const settings = new Map<string, ThreadEnrichment>();
   const settingsBudget = Math.min(4_000, Math.max(0, Math.floor(budgetMs / 3)));
   const deadline = Date.now() + settingsBudget;
@@ -467,6 +471,18 @@ export async function readThreadMonitor(
   // flight. Enrich that exact row before publishing it so normal native startup
   // does not become a transient missing-identity observation for independent UIs.
   await enrichThreads(client, after, expected.threadId, settings, deadline);
+  const exactTurns = timingTargets.length
+    ? await readExactTurns(
+        client,
+        {
+          instanceId: after.instanceId,
+          generation: after.generation,
+          rootThreadId: after.runtime.mainThreadId,
+        },
+        timingTargets,
+        Math.min(readDeadline, Date.now() + 4_000),
+      )
+    : [];
   const history =
     budgetMs > 0
       ? await readNativeDescendants(
@@ -476,7 +492,7 @@ export async function readThreadMonitor(
             generation: after.generation,
             rootThreadId: after.runtime.mainThreadId,
           },
-          Date.now() + Math.max(0, budgetMs - settingsBudget),
+          readDeadline,
         )
       : { rows: [], coverage: "unavailable" as const };
   const final =
@@ -531,6 +547,7 @@ export async function readThreadMonitor(
     nativeSessionId: final.runtime.mainThreadId,
     inventory: final.inventory,
     historyCoverage,
+    exactTurns,
     threads,
     missingSettings: threads.filter((thread) => thread.model == null || thread.effort == null)
       .length,
@@ -572,6 +589,7 @@ export async function discoverThreadMonitor(
   stateDir: string,
   workspace?: string,
   threadId?: string,
+  timingTargets: readonly TimingTarget[] = [],
 ) {
   const server = await discoverServer(stateDir, workspace);
   const empty = (phase: string): ThreadMonitor => ({
@@ -602,11 +620,16 @@ export async function discoverThreadMonitor(
     EVENT_PROTOCOL_VERSION,
   );
   try {
-    return await readThreadMonitor(client, {
-      instanceId: live.descriptor.instanceId,
-      workspace,
-      threadId: live.status.threadId,
-    });
+    return await readThreadMonitor(
+      client,
+      {
+        instanceId: live.descriptor.instanceId,
+        workspace,
+        threadId: live.status.threadId,
+      },
+      12_000,
+      timingTargets,
+    );
   } finally {
     client.close();
   }
