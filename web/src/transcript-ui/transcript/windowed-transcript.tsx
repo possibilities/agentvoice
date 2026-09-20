@@ -1,6 +1,11 @@
 "use client";
 
-import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
+import {
+  defaultRangeExtractor,
+  type Range,
+  useVirtualizer,
+  type Virtualizer,
+} from "@tanstack/react-virtual";
 import { ArrowDownIcon } from "lucide-react";
 import {
   type ReactNode,
@@ -101,6 +106,7 @@ export function WindowedTranscript<T extends { id: string }>({
 }: WindowedTranscriptProps<T>) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
   const awayRef = useRef(false);
   const followRef = useRef(follow);
   const stickToEndRef = useRef(true);
@@ -129,6 +135,7 @@ export function WindowedTranscript<T extends { id: string }>({
   const [initializing, setInitializing] = useState(true);
   const [startPadding, setStartPadding] = useState(24);
   const [endPadding, setEndPadding] = useState(48);
+  const [rowGap, setRowGap] = useState(24);
   const priorIdsRef = useRef({ ordered: messageIds, set: new Set(messageIds) });
   const pendingCountedIdsRef = useRef(new Set<string>());
   const unreadFrameRef = useRef<number | null>(null);
@@ -186,6 +193,18 @@ export function WindowedTranscript<T extends { id: string }>({
   }
 
   const getItemKey = useCallback((index: number) => rows[index]?.key ?? `missing:${index}`, [rows]);
+  const focusedRowIndex = focusedRowKey ? rows.findIndex((row) => row.key === focusedRowKey) : -1;
+  const rangeExtractor = useCallback(
+    (range: Range) => {
+      const indexes = defaultRangeExtractor(range);
+      if (focusedRowIndex >= 0 && !indexes.includes(focusedRowIndex)) {
+        indexes.push(focusedRowIndex);
+        indexes.sort((a, b) => a - b);
+      }
+      return indexes;
+    },
+    [focusedRowIndex],
+  );
 
   const queueAnchorCapture = useCallback(() => {
     if (anchorFrameRef.current != null) return;
@@ -222,7 +241,10 @@ export function WindowedTranscript<T extends { id: string }>({
           scrollFrameRef.current = null;
           return;
         }
-        if (distanceFromEnd(element) <= 1) {
+        // Direct DOM sizing can trail a replaced snapshot by a layout frame.
+        // A still-short scrollHeight must not settle before the new logical end.
+        const logicalEnd = Math.max(0, instance.getTotalSize() - element.clientHeight);
+        if (distanceFromEnd(element) <= 1 && Math.abs(element.scrollTop - logicalEnd) <= 1) {
           stableFrames++;
         } else {
           stableFrames = 0;
@@ -264,8 +286,10 @@ export function WindowedTranscript<T extends { id: string }>({
     getScrollElement: () => viewportRef.current,
     estimateSize: (index) => (rows[index]?.kind === "slot" ? 96 : 180),
     getItemKey,
+    rangeExtractor,
     paddingStart: startPadding,
     paddingEnd: endPadding,
+    gap: rowGap,
     overscan: 6,
     useFlushSync: false,
     directDomUpdates: true,
@@ -333,7 +357,9 @@ export function WindowedTranscript<T extends { id: string }>({
 
       unreadFrameRef.current = null;
       const viewportEnd = (virtualizer.scrollOffset ?? element.scrollTop) + element.clientHeight;
-      const lastVirtualIndex = virtualItems.at(-1)?.index ?? -1;
+      // A retained focused row can sit beyond the ordinary visible window.
+      const lastVisibleIndex =
+        virtualItems.findLast((item) => item.start < viewportEnd)?.index ?? -1;
       const byIndex = new Map(virtualItems.map((item) => [item.index, item]));
       let addedUnread = 0;
       for (const id of pendingCountedIdsRef.current) {
@@ -342,7 +368,7 @@ export function WindowedTranscript<T extends { id: string }>({
         if (
           index >= 0 &&
           ((item && item.end > viewportEnd + VISIBILITY_EPSILON) ||
-            (!item && index > lastVirtualIndex))
+            (!item && index > lastVisibleIndex))
         ) {
           addedUnread++;
         }
@@ -512,9 +538,11 @@ export function WindowedTranscript<T extends { id: string }>({
       const style = getComputedStyle(element);
       const start = Number.parseFloat(style.paddingTop);
       const end = Number.parseFloat(style.paddingBottom);
+      const gap = Number.parseFloat(style.getPropertyValue("--transcript-row-gap"));
       if (Number.isFinite(start))
         setStartPadding((current) => (current === start ? current : start));
       if (Number.isFinite(end)) setEndPadding((current) => (current === end ? current : end));
+      if (Number.isFinite(gap)) setRowGap((current) => (current === gap ? current : gap));
     };
     updatePadding();
     const observer = new ResizeObserver(updatePadding);
@@ -720,6 +748,25 @@ export function WindowedTranscript<T extends { id: string }>({
         role="region"
         tabIndex={0}
         aria-label={label}
+        onFocusCapture={(event) => {
+          if (!(event.target instanceof Element)) return;
+          // Portaled dialogs bubble through their source row in React. Retain
+          // that row while inspecting, so the dialog and native opener survive.
+          if (event.target.closest('[role="dialog"]')) return;
+          setFocusedRowKey(
+            event.target.closest<HTMLElement>("[data-windowed-row-key]")?.dataset.windowedRowKey ??
+              null,
+          );
+        }}
+        onBlurCapture={(event) => {
+          const next = event.relatedTarget;
+          if (
+            next instanceof Element &&
+            (event.currentTarget.contains(next) || next.closest('[role="dialog"]'))
+          )
+            return;
+          setFocusedRowKey(null);
+        }}
         onScroll={handleScroll}
         onWheel={(event) => {
           if (event.ctrlKey) return;
@@ -831,8 +878,6 @@ export function WindowedTranscript<T extends { id: string }>({
                   left: "var(--transcript-inline-padding, 32px)",
                   width: "calc(100% - 2 * var(--transcript-inline-padding, 32px))",
                   minWidth: 0,
-                  paddingBottom:
-                    virtualRow.index === rows.length - 1 ? 0 : "var(--transcript-row-gap, 24px)",
                   boxSizing: "border-box",
                 }}
               >

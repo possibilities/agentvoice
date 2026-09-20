@@ -177,8 +177,10 @@ loads launch configuration, starts media or changes server protocols.
 
 Canonical realtime delegation envelopes use the shared Codex presentation helper:
 the delegated input appears as an ordinary Human message, with a microphone details
-button immediately beside `Human` for displayed text, optional Voice context and
-the exact Original message. Session
+button in the right action rail for displayed text, optional Voice context and
+the exact Original message. Accessible identity glyphs replace visible author
+headers, while semantic timestamps remain associated with each identity mark
+([ADR 0107](../docs/adr/0107-transcript-identity-rails.md)). Session
 endings display as context handoffs. Unknown,
 malformed or mixed envelopes retain their ordinary presentation; original content
 is never rewritten. Column width, responsive padding and message spacing come

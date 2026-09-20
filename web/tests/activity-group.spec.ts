@@ -168,6 +168,7 @@ test("live tail growth preserves group focus, disclosure state, scroll pinning, 
   const group = page.locator(".activity-group");
   const trigger = group.locator(".activity-group__trigger");
   await trigger.scrollIntoViewIfNeeded();
+  await expect(trigger).toBeVisible();
   await trigger.focus();
   await trigger.press("Enter");
   await expect(trigger).toHaveAttribute("aria-expanded", "true");

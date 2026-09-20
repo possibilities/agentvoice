@@ -166,8 +166,9 @@ for (const viewport of [
 
     const inspect = agent.getByRole("button", { name: "Open voice message details" });
     await expect(inspect).toHaveCount(1);
-    await expect(inspect.locator("..")).toHaveClass("message-author");
-    await expect(inspect.locator("..")).toHaveText("Human");
+    await expect(inspect.locator("..")).toHaveClass("identity-row__actions");
+    await expect(agent.getByRole("img", { name: "Human via Voice", exact: true })).toBeVisible();
+    await expect(agent.locator(".message-author, [data-slot=message-header]")).toHaveCount(0);
     await expect(inspect.locator("svg")).toBeVisible();
     await expect(inspect).not.toHaveAttribute("title");
     await expect(agent.getByText("Via Voice", { exact: true })).toHaveCount(0);

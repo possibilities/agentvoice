@@ -3,6 +3,7 @@ import { MicIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { focusComposerAtEnd } from "../../transcript/focus-composer";
 import type { MessagePresentation } from "../../types/message";
+import { messageTime } from "./identity-row";
 
 function ModalSection({ heading, children }: { heading: string; children: ReactNode }) {
   return (
@@ -16,10 +17,13 @@ function ModalSection({ heading, children }: { heading: string; children: ReactN
 export function VoiceMessageModal({
   presentation,
   original,
+  createdAt,
 }: {
   presentation: MessagePresentation;
   original: string;
+  createdAt?: string;
 }) {
+  const time = messageTime(createdAt);
   const voiceContext = presentation.details?.find(
     (detail) => detail.label === "Voice context",
   )?.content;
@@ -55,6 +59,11 @@ export function VoiceMessageModal({
             </Dialog.Close>
           </header>
           <div className="voice-message-modal__content">
+            {time ? (
+              <ModalSection heading="Message time">
+                <time dateTime={createdAt}>{time}</time>
+              </ModalSection>
+            ) : null}
             <ModalSection heading="Displayed text">
               <p className="voice-message-modal__display-title">{presentation.title}</p>
               <pre>{presentation.body}</pre>

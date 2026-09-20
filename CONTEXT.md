@@ -290,8 +290,10 @@ _Avoid_: speech replay, control attachment, transcript database.
 presentation adapters, React transcript/composer/document components, and scoped
 styles under `web/src/transcript-ui/`. It renders one headerless Agent stream and
 accepts host-authorized Agent input without owning native history, transport, or
-work execution. Projected voice handoffs remain readable Human rows with an
-accessible microphone details trigger;
+work execution. Messages use accessible identity glyphs in a left rail without
+visible author headers; semantic time remains associated with those marks. Projected voice
+handoffs remain readable Human rows with an accessible microphone details trigger
+in the right rail;
 raw Voice observations are not a second visual lane. It has one full-transcript
 surface; top-level Human and Agent messages plus one generic Tool call disclosure
 render observed events without a parallel card system. Eligible consecutive Tool

@@ -1,10 +1,11 @@
-import { ChevronRightIcon, CircleAlertIcon, TerminalSquareIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { Marker, MarkerContent } from "@/components/ui/marker";
 import { useDisclosureState } from "@/transcript/disclosure-state";
 import type { Message } from "@/types/message";
+import { IdentityRow } from "./identity-row";
 
 export function ToolActivityMessage({
   message,
@@ -32,41 +33,44 @@ export function ToolActivityMessage({
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <Marker
-        variant="border"
+        variant="default"
         className="tool-disclosure"
         data-transcript-type="tool-call"
         data-state={activity?.state}
         data-error={isError || undefined}
       >
-        <MarkerIcon>{isError ? <CircleAlertIcon /> : <TerminalSquareIcon />}</MarkerIcon>
-        <MarkerContent>
-          <CollapsibleTrigger
-            className="tool-disclosure__trigger"
-            disabled={!hasDetails}
-            data-open={open || undefined}
-          >
-            <span className="tool-disclosure__name">
-              {isError ? "Failed · " : ""}
-              {activity?.name ?? "Tool"}
-            </span>
-            <span className="tool-disclosure__summary">{summary}</span>
-            {activity?.meta ? <span className="tool-disclosure__meta">{activity.meta}</span> : null}
-            {hasDetails ? <ChevronRightIcon className="tool-disclosure__chevron" /> : null}
-          </CollapsibleTrigger>
-          {hasDetails ? (
-            <CollapsibleContent className="tool-disclosure__content">
-              {sections.map((section, index) => (
-                <section key={`${section.label}:${index}`} className="tool-detail">
-                  <h4>{section.label}</h4>
-                  <pre tabIndex={0} aria-label={section.label}>
-                    {section.content}
-                  </pre>
-                </section>
-              ))}
-              {children}
-            </CollapsibleContent>
-          ) : null}
-        </MarkerContent>
+        <IdentityRow identity="tool" createdAt={message.createdAt}>
+          <MarkerContent>
+            <CollapsibleTrigger
+              className="tool-disclosure__trigger"
+              disabled={!hasDetails}
+              data-open={open || undefined}
+            >
+              <span className="tool-disclosure__name">
+                {isError ? "Failed · " : ""}
+                {activity?.name ?? "Tool"}
+              </span>
+              <span className="tool-disclosure__summary">{summary}</span>
+              {activity?.meta ? (
+                <span className="tool-disclosure__meta">{activity.meta}</span>
+              ) : null}
+              {hasDetails ? <ChevronRightIcon className="tool-disclosure__chevron" /> : null}
+            </CollapsibleTrigger>
+            {hasDetails ? (
+              <CollapsibleContent className="tool-disclosure__content">
+                {sections.map((section, index) => (
+                  <section key={`${section.label}:${index}`} className="tool-detail">
+                    <h4>{section.label}</h4>
+                    <pre tabIndex={0} aria-label={section.label}>
+                      {section.content}
+                    </pre>
+                  </section>
+                ))}
+                {children}
+              </CollapsibleContent>
+            ) : null}
+          </MarkerContent>
+        </IdentityRow>
       </Marker>
     </Collapsible>
   );

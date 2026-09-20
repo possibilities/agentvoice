@@ -70,8 +70,8 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await expect(page.getByText(view.agentNotice, { exact: true })).toBeVisible();
     await expect.poll(() => inputGroup.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
     await expect.poll(async () => (await metrics()).animation).toBe("none");
+    await expect.poll(async () => (await metrics()).color).not.toBe(idle.color);
     const unavailable = await metrics();
-    expect(unavailable.color).not.toBe(idle.color);
     expect(unavailable.top).toBe(idle.top);
     expect(unavailable.height).toBe(idle.height);
     await expect(input).toBeEditable();

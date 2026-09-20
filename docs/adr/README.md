@@ -170,3 +170,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0104: Attribute local-network privacy to the service runtime](0104-service-local-network-privacy-identity.md) — accepted; the generated runtime plist and legacy LaunchAgent identify the same responsible bundle without changing network exposure or granting consent.
 - [0105: Compose transcript events from conversation primitives](0105-compose-transcript-events-from-primitives.md) — accepted and refined by 0106; Human and Agent messages plus one generic Tool call shell replace bespoke event cards, while lifecycle rows receive no replacement UI.
 - [0106: Restore compact tool activity groups](0106-restore-compact-tool-activity-groups.md) — accepted; eligible consecutive Tool calls collapse into a counted, keyboard-accessible disclosure whose expanded generic Tool blocks use spacing without horizontal rules.
+
+- [0107: Put transcript identity beside the content](0107-transcript-identity-rails.md) — accepted experiment; accessible identity glyphs replace author headers while shared rails preserve Human chrome, voice inspection, activity summaries, and focused windowed interactions.

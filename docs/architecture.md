@@ -59,6 +59,10 @@ owns the current source map and recording/attachment implementation guidance.
   are one internal boundary. It always renders the full observed transcript; there
   is no messages-only detail mode in the renderer, source contract or fixtures.
   Every visible row is a Human message, Agent message, or generic Tool call.
+  Fixed identity rails replace visible author headers; Human inset chrome and
+  right-rail voice inspection retain their existing content. Windowing retains
+  the focused row while a control or its portaled dialog owns focus
+  ([ADR 0107](adr/0107-transcript-identity-rails.md)).
   Machine events including system, routing, file-change and compaction evidence
   share the same activity disclosure; file attachments and lazy Pierre diffs are
   specialized inner details. There is no event-card registry, special compaction

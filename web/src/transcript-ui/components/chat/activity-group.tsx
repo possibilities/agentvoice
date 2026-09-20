@@ -4,6 +4,7 @@ import { activitySummary, type TranscriptActivityItem } from "@/lib/transcript";
 import { useAnyDisclosure, useDisclosureState } from "@/transcript/disclosure-state";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { ChatMessage } from "./chat-message";
+import { IdentityRow } from "./identity-row";
 import { RoutingContextActivity } from "./routing-context-activity";
 
 function activityKindLabel(name: string, count: number) {
@@ -44,20 +45,26 @@ export const ActivityGroup = memo(function ActivityGroup({
       className="activity-group"
       data-error={errors > 0 || undefined}
     >
-      <CollapsibleTrigger className="activity-group__trigger" data-open={open || undefined}>
-        <ChevronRightIcon className="tool-disclosure__chevron" aria-hidden="true" />
-        <span className="activity-group__count">{items.length} activities</span>
-        <span className="activity-group__summary">
-          {kinds.map(([name, count]) => `${count} ${activityKindLabel(name, count)}`).join(" · ")}
-        </span>
-        {errors > 0 ? <span className="activity-group__error">{errors} failed</span> : null}
-        {running > 0 ? <span className="telemetry-live">{running} running</span> : null}
-        {files > 0 ? (
-          <span className="activity-group__files">
-            {files} file {files === 1 ? "change" : "changes"}
-          </span>
-        ) : null}
-      </CollapsibleTrigger>
+      <IdentityRow identity="group">
+        <div className="identity-row__content">
+          <CollapsibleTrigger className="activity-group__trigger" data-open={open || undefined}>
+            <ChevronRightIcon className="tool-disclosure__chevron" aria-hidden="true" />
+            <span className="activity-group__count">{items.length} activities</span>
+            <span className="activity-group__summary">
+              {kinds
+                .map(([name, count]) => `${count} ${activityKindLabel(name, count)}`)
+                .join(" · ")}
+            </span>
+            {errors > 0 ? <span className="activity-group__error">{errors} failed</span> : null}
+            {running > 0 ? <span className="telemetry-live">{running} running</span> : null}
+            {files > 0 ? (
+              <span className="activity-group__files">
+                {files} file {files === 1 ? "change" : "changes"}
+              </span>
+            ) : null}
+          </CollapsibleTrigger>
+        </div>
+      </IdentityRow>
       <CollapsibleContent>
         {open ? (
           <div className="activity-group__items">
