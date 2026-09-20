@@ -354,6 +354,95 @@ describe("watchable thread inventory", () => {
     expect(JSON.stringify(calls)).not.toContain("items");
   });
 
+  test("enriches only exact nonconflicting live turns from independent history evidence", async () => {
+    const live = snapshot([
+      thread("root"),
+      {
+        ...thread("same", "root"),
+        turn: { id: "same-turn", status: "failed" },
+      },
+      {
+        ...thread("conflict", "root"),
+        turn: { id: "conflict-turn", status: "failed", startedAt: 30 },
+      },
+      {
+        ...thread("different", "root"),
+        status: "active",
+        turn: { id: "new-turn", status: "inProgress", startedAt: 50 },
+      },
+    ]);
+    const historyTurn = (id: string) => {
+      if (id === "same")
+        return { id: "same-turn", status: "completed", startedAt: 10, completedAt: 20 };
+      if (id === "conflict")
+        return { id: "conflict-turn", status: "completed", startedAt: 31, completedAt: 40 };
+      return { id: "old-turn", status: "completed", startedAt: 1, completedAt: 2 };
+    };
+    const result = await readThreadMonitor(
+      {
+        async request(method, params) {
+          const input = params as Record<string, unknown>;
+          if (method === "state.get") return live;
+          if (method === "conversation.thread.get") return metadata(String(input["threadId"]));
+          if (method === "conversation.turns.list")
+            return {
+              instanceId: "call",
+              generation: 1,
+              method,
+              rootThreadId: "root",
+              threadId: input["threadId"],
+              revisionBefore: 9,
+              revisionAfter: 9,
+              changedDuringRead: false,
+              data: [historyTurn(String(input["threadId"]))],
+              nextCursor: null,
+            };
+          expect(method).toBe("conversation.threads.list");
+          return {
+            instanceId: "call",
+            generation: 1,
+            method,
+            rootThreadId: "root",
+            revisionBefore: 9,
+            revisionAfter: 9,
+            changedDuringRead: false,
+            data:
+              input["archived"] === true
+                ? []
+                : ["same", "conflict", "different"].map((id) => ({
+                    id,
+                    parentThreadId: "root",
+                    cwd: "/workspace",
+                    status: { type: "notLoaded" },
+                    collaborationIdentity: {
+                      state: "verified",
+                      path: `/root/${id}`,
+                    },
+                  })),
+            nextCursor: null,
+          };
+        },
+      },
+      expected,
+    );
+    expect(result.threads.find((row) => row.id === "same")?.turn).toEqual({
+      id: "same-turn",
+      status: "failed",
+      startedAt: 10,
+      completedAt: 20,
+    });
+    expect(result.threads.find((row) => row.id === "conflict")?.turn).toEqual({
+      id: "conflict-turn",
+      status: "failed",
+      startedAt: 30,
+    });
+    expect(result.threads.find((row) => row.id === "different")?.turn).toEqual({
+      id: "new-turn",
+      status: "inProgress",
+      startedAt: 50,
+    });
+  });
+
   test("marks native history partial when descendant pages cross a native revision", async () => {
     const live = snapshot([thread("root"), thread("child", "root")]);
     let page = 0;

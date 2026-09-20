@@ -176,12 +176,29 @@ function turnFromHistory(value: unknown): ThreadView["turn"] {
   };
 }
 
-function mergeTurn(live: ThreadView["turn"], history: ThreadView["turn"]): ThreadView["turn"] {
-  if (!live) return history;
-  if (!history || live.id !== history.id) return live;
-  const startedAt = live.startedAt ?? history.startedAt;
+function mergeTurn(
+  live: ThreadView["turn"],
+  historical: readonly NonNullable<ThreadView["turn"]>[],
+): ThreadView["turn"] {
+  if (!live) return historical[0] ?? null;
+  const matching = historical.filter((turn) => turn.id === live.id);
+  if (matching.length === 0) return live;
+  const started = new Set(
+    [live.startedAt, ...matching.map((turn) => turn.startedAt)].filter(
+      (value): value is number => value !== undefined,
+    ),
+  );
+  const completed = new Set(
+    [live.completedAt, ...matching.map((turn) => turn.completedAt)].filter(
+      (value): value is number => value !== undefined,
+    ),
+  );
+  if (started.size > 1 || completed.size > 1) return live;
+  const startedAt = live.startedAt ?? started.values().next().value;
   const completedAt =
-    live.status === "inProgress" ? undefined : (live.completedAt ?? history.completedAt);
+    live.status === "inProgress"
+      ? undefined
+      : (live.completedAt ?? completed.values().next().value);
   return {
     id: live.id,
     status: live.status,
@@ -316,6 +333,9 @@ function mergeRows(rootThreadId: string, rows: ObservedRow[]): ThreadRow[] {
   return [...grouped.entries()].map(([id, observed]) => {
     const live = observed.find((row) => row.source === "live_inventory");
     const base = live ?? observed[0]!;
+    const historicalTurns = observed.flatMap((row) =>
+      row.source === "native_history" && row.turn ? [row.turn] : [],
+    );
     const parents = [
       ...new Set(
         observed.map((row) => row.parentThreadId).filter((parent): parent is string => !!parent),
@@ -408,7 +428,7 @@ function mergeRows(rootThreadId: string, rows: ObservedRow[]): ThreadRow[] {
       name: base.name,
       status: live?.status ?? "notLoaded",
       activeFlags: live?.activeFlags ?? [],
-      turn: mergeTurn(live?.turn ?? null, base.turn),
+      turn: mergeTurn(live?.turn ?? null, historicalTurns),
       model: live?.model ?? base.model,
       effort: live?.effort ?? base.effort,
       nickname: live?.nickname ?? base.nickname,
