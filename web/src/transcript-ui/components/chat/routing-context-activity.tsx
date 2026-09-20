@@ -23,6 +23,8 @@ export function RoutingContextActivity({
     <ToolActivityMessage
       message={{
         id: messages[0]?.id ?? "routing-context",
+        // The rollup's creation time follows its stable first-source identity.
+        createdAt: messages[0]?.createdAt,
         role: "system",
         status: "complete",
         content: "",

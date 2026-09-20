@@ -50,6 +50,9 @@ group's middle content column, without identity or action rails of their own.
 Their disclosure content, state, keys and eight-pixel rhythm remain; standalone
 Tools retain the full identity row. Known child timestamps are associated with
 the child disclosure trigger when its identity mark is absent.
+A routing rollup carries the first source message's `createdAt`, matching its
+stable first-source ID. Later updates retain that creation time. Missing or invalid
+first-source time stays omitted, including when a later update has a known time.
 
 The existing Message, Bubble, Marker, Collapsible and Dialog primitives own their
 content and interactions. WindowedTranscript additionally retains at most one

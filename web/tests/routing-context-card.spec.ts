@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { TranscriptMessage } from "../src/transcript-ui/transcript/index.ts";
 
+const firstSourceCreatedAt = "2026-09-20T14:30:00.000Z";
+
 function routing(id: string, revision: number, remaining: number): TranscriptMessage {
   return {
     id,
+    createdAt: new Date(Date.parse(firstSourceCreatedAt) + (revision - 1) * 60_000).toISOString(),
     role: "system",
     status: "complete",
     content: "Routing context updated.",
@@ -91,6 +94,17 @@ test("routing refreshes share one activity disclosure with exact auditable updat
   await group.press("Enter");
   await expect(activity).toHaveCount(1);
   await expect(activity).toContainText("2 updates");
+  const trigger = activity.getByRole("button");
+  const sourceTime = activity.locator("time");
+  const localizedTime = await page.evaluate(
+    (value) => new Date(value).toLocaleString(),
+    firstSourceCreatedAt,
+  );
+  await expect(sourceTime).toHaveAttribute("datetime", firstSourceCreatedAt);
+  await expect(sourceTime).toBeHidden();
+  await expect(trigger).toHaveAttribute("aria-describedby", (await sourceTime.getAttribute("id"))!);
+  await expect(trigger).toHaveAttribute("title", localizedTime);
+  await expect(trigger).toHaveAccessibleDescription(localizedTime);
   await activity.getByRole("button").focus();
   await activity.getByRole("button").press("Enter");
   await expect(activity.getByLabel("Routing update 2", { exact: true })).toContainText(
@@ -125,6 +139,19 @@ test("routing refreshes share one activity disclosure with exact auditable updat
     path: "test-results/routing-context-activity-narrow.png",
     fullPage: true,
   });
+
+  // A known later update cannot supply a missing creation time for the first source.
+  await setMessages([
+    { ...first, createdAt: undefined },
+    { id: "tool", role: "tool", content: "ordinary tool", status: "complete" },
+    routing("routing-2", 2, 68),
+  ]);
+  await expect(group).toBeVisible();
+  if ((await group.getAttribute("aria-expanded")) === "false") await group.click();
+  await expect(activity).toHaveCount(1);
+  await expect(activity.locator("time")).toHaveCount(0);
+  await expect(activity.getByRole("button")).not.toHaveAttribute("aria-describedby");
+  await expect(activity.getByRole("button")).not.toHaveAttribute("title");
 });
 
 test("routing rollups survive history replacement and virtualization", async ({ page }) => {
