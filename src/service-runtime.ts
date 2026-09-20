@@ -18,7 +18,9 @@ import {
 import { join } from "node:path";
 import { ownedDirectory, safeAncestors } from "./private-files.ts";
 
-const IDENTIFIER = "io.arthack.agentvoice";
+export const SERVICE_RUNTIME_IDENTIFIER = "io.arthack.agentvoice";
+export const SERVICE_RUNTIME_LOCAL_NETWORK_USAGE =
+  "AgentVoice connects to trusted devices and development services on your local network when you ask it to.";
 export function serviceRuntimeRoot(stateDir: string): string {
   return join(stateDir, "default", "service", "runtime");
 }
@@ -152,7 +154,7 @@ export function stageServiceRuntime(stateDir: string, bun: string) {
       join(contents, "Info.plist"),
       `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>${IDENTIFIER}</string>
+<key>CFBundleIdentifier</key><string>${SERVICE_RUNTIME_IDENTIFIER}</string>
 <key>CFBundleName</key><string>AgentVoice</string>
 <key>CFBundleDisplayName</key><string>AgentVoice</string>
 <key>CFBundleExecutable</key><string>agentvoice</string>
@@ -160,6 +162,7 @@ export function stageServiceRuntime(stateDir: string, bun: string) {
 <key>CFBundleVersion</key><string>1</string>
 <key>LSUIElement</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>AgentVoice uses your microphone during voice calls that you start in its terminal frontend.</string>
+<key>NSLocalNetworkUsageDescription</key><string>${SERVICE_RUNTIME_LOCAL_NETWORK_USAGE}</string>
 </dict></plist>\n`,
       { mode: 0o600 },
     );
@@ -173,9 +176,9 @@ export function stageServiceRuntime(stateDir: string, bun: string) {
         "--options",
         "runtime",
         "--identifier",
-        IDENTIFIER,
+        SERVICE_RUNTIME_IDENTIFIER,
         "--requirements",
-        `=designated => identifier "${IDENTIFIER}"`,
+        `=designated => identifier "${SERVICE_RUNTIME_IDENTIFIER}"`,
         "--entitlements",
         entitlementPath,
         app,

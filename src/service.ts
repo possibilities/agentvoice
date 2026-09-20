@@ -13,6 +13,7 @@ import {
 } from "./service-handoff.ts";
 import {
   checkServiceRuntime,
+  SERVICE_RUNTIME_IDENTIFIER,
   serviceRuntimeExecutable,
   stageServiceRuntime,
 } from "./service-runtime.ts";
@@ -129,7 +130,7 @@ export function servicePlist(options: ServiceOptions, label = SERVICE_LABEL): st
 <key>ExitTimeOut</key><integer>60</integer>
 <key>ProcessType</key><string>Interactive</string>
 <key>LimitLoadToSessionType</key><string>Aqua</string>
-<key>Umask</key><integer>63</integer>
+${options.packageRuntime ? `<key>AssociatedBundleIdentifiers</key><array><string>${SERVICE_RUNTIME_IDENTIFIER}</string></array>\n` : ""}<key>Umask</key><integer>63</integer>
 <key>StandardOutPath</key><string>${xml(join(logs, "stdout.log"))}</string>
 <key>StandardErrorPath</key><string>${xml(join(logs, "stderr.log"))}</string>
 </dict></plist>\n`;

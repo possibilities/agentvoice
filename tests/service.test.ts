@@ -109,6 +109,10 @@ test("plist has explicit argv, login lifecycle, private logs and only selected e
   expect(text).not.toContain("--workspace");
   expect(text).toContain("<key>KeepAlive</key><true/>");
   expect(text).toContain("<key>RunAtLoad</key><true/>");
+  expect(text).not.toContain("AssociatedBundleIdentifiers");
+  expect(servicePlist({ ...f.options, packageRuntime: true })).toContain(
+    "<key>AssociatedBundleIdentifiers</key><array><string>io.arthack.agentvoice</string></array>",
+  );
   expect(text).toContain("<key>CODEX_HOME</key>");
   expect(text).not.toMatch(/UNRELATED_SECRET|must-not-copy/);
   expect(servicePlist({ ...f.options, env: {} })).not.toContain("CODEX_HOME");

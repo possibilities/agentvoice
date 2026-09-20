@@ -189,6 +189,7 @@ exit "$FIXTURE_COMPILER_EXIT"
       const options = {
         home: base, stateDir: base + "/service-state", uid: process.getuid(),
         bun: process.execPath, entrypoint: process.env["FIXTURE_ROOT"] + "/src/main.ts", env: process.env,
+        packageRuntime: true,
         launchctl: async (args) => {
           appendFileSync(base + "/launchctl-calls", JSON.stringify(args) + "\\n");
           if (args[0] === process.env["FIXTURE_SERVICE_FAILURE"]) return { code: 5, out: "", err: "fixture service failure" };
@@ -720,6 +721,21 @@ test("installer publishes command then registers default service with a fake lau
   );
   expect(plist).toContain(f.source);
   expect(plist).toContain("<string>server</string>");
+  expect(plist).toContain(
+    "<key>AssociatedBundleIdentifiers</key><array><string>io.arthack.agentvoice</string></array>",
+  );
+  const runtimeInfo = readFileSync(
+    join(f.base, "service-state/default/service/runtime/AgentVoice.app/Contents/Info.plist"),
+    "utf8",
+  );
+  expect(runtimeInfo).toContain(
+    "<key>CFBundleIdentifier</key><string>io.arthack.agentvoice</string>",
+  );
+  expect(runtimeInfo).toContain("NSMicrophoneUsageDescription");
+  expect(runtimeInfo).toContain("NSLocalNetworkUsageDescription");
+  expect(runtimeInfo).toContain(
+    "AgentVoice connects to trusted devices and development services on your local network when you ask it to.",
+  );
   expect(readFileSync(join(f.base, "launchctl-calls"), "utf8")).toContain("bootstrap");
 });
 

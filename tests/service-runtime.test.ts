@@ -17,6 +17,8 @@ import { join } from "node:path";
 import {
   checkServiceRuntime,
   cleanupStagedServiceRuntimes,
+  SERVICE_RUNTIME_IDENTIFIER,
+  SERVICE_RUNTIME_LOCAL_NETWORK_USAGE,
   serviceRuntimeExecutable,
   serviceRuntimeRoot,
   stageServiceRuntime,
@@ -56,13 +58,32 @@ test("stale runtime stages are removed only after private-tree validation", () =
 });
 
 test.skipIf(process.platform !== "darwin")(
-  "owned service runtime preserves Bun entitlements, adds microphone identity and rolls back updates",
+  "owned service runtime preserves Bun entitlements and privacy identity across publication",
   () => {
     const state = realpathSync(mkdtempSync("/tmp/av-signed-runtime-"));
     try {
       const sourceEntitlements = entitlements(process.execPath);
+      const sourceValues = JSON.parse(
+        execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", "--", "-"], {
+          input: sourceEntitlements,
+        }).toString(),
+      );
       const first = stageServiceRuntime(state, process.execPath);
       expect(existsSync(serviceRuntimeRoot(state))).toBe(false);
+      const firstStage = readdirSync(join(state, "default/service")).find((name) =>
+        name.startsWith(".runtime-stage-"),
+      );
+      expect(firstStage).toBeDefined();
+      const preparedInfoPath = join(
+        state,
+        "default/service",
+        firstStage!,
+        "next/AgentVoice.app/Contents/Info.plist",
+      );
+      const preparedInfo = readFileSync(preparedInfoPath, "utf8");
+      expect(preparedInfo).toContain("NSLocalNetworkUsageDescription");
+      expect(preparedInfo).toContain(SERVICE_RUNTIME_LOCAL_NETWORK_USAGE);
+      expect(preparedInfo).toContain(SERVICE_RUNTIME_IDENTIFIER);
       first.publish();
       first.commit();
       checkServiceRuntime(state);
@@ -79,13 +100,19 @@ test.skipIf(process.platform !== "darwin")(
           input: signed,
         }).toString(),
       );
-      expect(values["com.apple.security.device.audio-input"]).toBe(true);
+      expect(values).toEqual({
+        ...sourceValues,
+        "com.apple.security.device.audio-input": true,
+      });
       expect(signed).toContain("com.apple.security.cs.allow-jit");
       expect(entitlements(process.execPath)).toBe(sourceEntitlements);
       const infoPath = join(serviceRuntimeRoot(state), "AgentVoice.app/Contents/Info.plist");
       const info = readFileSync(infoPath, "utf8");
+      expect(info).toBe(preparedInfo);
       expect(info).toContain("NSMicrophoneUsageDescription");
-      expect(info).toContain("io.arthack.agentvoice");
+      expect(info).toContain("NSLocalNetworkUsageDescription");
+      expect(info).toContain(SERVICE_RUNTIME_LOCAL_NETWORK_USAGE);
+      expect(info).toContain(SERVICE_RUNTIME_IDENTIFIER);
       const requirement = execFileSync("/usr/bin/codesign", ["-d", "-r-", executable], {
         stdio: ["ignore", "pipe", "pipe"],
       }).toString();

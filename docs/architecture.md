@@ -299,11 +299,15 @@ retires only the ownership-verified former `dev.agentvoice.default` job.
 The macOS service uses the installer-owned private signed Bun copy in
 `default/service/runtime/AgentVoice.app`, distinct from the user-facing menu app.
 It preserves Bun entitlements and adds
-`com.apple.security.device.audio-input` plus NSMicrophoneUsageDescription. Never
-re-sign Homebrew Bun or write TCC grants. Keep the bundle's stable signing identity,
-receipt checks and transactional rollback. Restart validates the persisted bundle
-path even if the invoking XDG state differs. Packaging tests use temporary copies,
-signing inspection and --version only; actual microphone consent remains macOS-owned.
+`com.apple.security.device.audio-input` plus microphone and local-network usage
+descriptions. The LaunchAgent's `AssociatedBundleIdentifiers` names the same
+`io.arthack.agentvoice` responsible bundle for it and its children. No network
+entitlement, listener, origin, firewall rule, or LAN service is added. Never re-sign
+Homebrew Bun or write privacy grants. Keep the bundle's stable ad-hoc signing
+identity, receipt checks and transactional rollback. Restart validates the persisted
+bundle path even if the invoking XDG state differs. Packaging tests use temporary
+copies, signing inspection and --version only; actual privacy consent remains
+macOS-owned.
 
 
 Voice discovery is owned by `src/core/voice-catalog.ts`: query the owned native child,

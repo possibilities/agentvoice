@@ -167,3 +167,4 @@ different decision. Keep this navigation index and the record's status together.
 - [0102: Present one Agent transcript in the web UI](0102-agent-only-web-transcript.md) — accepted; a headerless Agent stream and keyboard composer replace pane preferences, raw Voice rendering, and visible send/mode/picker controls while retaining projected voice handoffs and server data.
 
 - [0103: Retire synthetic subagent lifecycle steering](0103-retire-synthetic-subagent-lifecycle-steering.md) — accepted; native lifecycle remains read-only while Codex's distinct parent result queue remains authoritative.
+- [0104: Attribute local-network privacy to the service runtime](0104-service-local-network-privacy-identity.md) — accepted; the generated runtime plist and legacy LaunchAgent identify the same responsible bundle without changing network exposure or granting consent.

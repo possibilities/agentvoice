@@ -1217,15 +1217,17 @@ The installer renames the previously managed `dev.agentvoice.default` service to
 `io.arthack.agentvoice.server`, removing only a verified installer-owned old job.
 
 
-### macOS microphone permission for the service
+### macOS privacy permissions for the service runtime
 
 The waiting service uses a private runtime bundle, not the visible menu app. The
 installer packages its own copy of Bun as a signed `AgentVoice.app` below
 `~/.local/state/agentvoice/default/service/runtime/` (honoring XDG state).
 It preserves Bun's runtime entitlements and adds microphone access plus an
-AgentVoice usage description. The LaunchAgent and its runtime children use this
-executable; the Homebrew Bun installation is never modified. A stable app signing
-identity is retained across installer updates, and modified bundles are refused.
+AgentVoice usage description. Its Info.plist also explains local-network access,
+and the LaunchAgent associates itself with that same responsible bundle so its
+child processes use the `io.arthack.agentvoice` privacy identity. The Homebrew Bun
+installation is never modified. The existing stable ad-hoc signing identity is
+retained across installer updates, and modified bundles are refused.
 Failed service updates restore the previous runtime before restarting its job.
 Its `io.arthack.agentvoice` identity remains distinct from the menu app's
 `io.arthack.agentvoice.menu` identity so existing client microphone grants remain
@@ -1237,3 +1239,30 @@ If previously denied, enable AgentVoice under System Settings → Privacy & Secu
 change privacy grants or open audio while the server is waiting. A live connection
 alone does not establish microphone permission: macOS can supply silent capture
 when access is denied.
+
+On macOS 15 and later, the first operation that reaches a device or service on a
+directly connected network can show the AgentVoice local-network prompt. macOS may
+reject that first operation while the prompt is open; retry it after choosing
+**Allow**. The per-user toggle then appears under System Settings → Privacy &
+Security → Local Network. If access was denied, enable AgentVoice there and retry
+the operation; restart the affected client or service if its existing connection
+does not recover.
+
+The metadata becomes active only after a full installer publishes the signed
+runtime bundle and restarts the LaunchAgent. Editing the checkout, rebuilding the
+menu app, or restarting only the disposable Codex runtime does not replace this
+bundle. The metadata allows macOS to ask and attribute AgentVoice and its children;
+it does not grant local-network access, change the user's toggle, or bypass a
+denial. It also adds no LAN listener, accepted origin, firewall rule, Bonjour
+service, multicast entitlement, or network-client entitlement.
+
+After installation, verify the runtime metadata, LaunchAgent association, signature,
+and retained entitlements without opening a connection:
+
+```sh
+state_root="${XDG_STATE_HOME:-$HOME/.local/state}/agentvoice"
+/usr/bin/plutil -p "$state_root/default/service/runtime/AgentVoice.app/Contents/Info.plist" | rg 'CFBundleIdentifier|NS(LocalNetwork|Microphone)UsageDescription'
+/usr/bin/plutil -p "$HOME/Library/LaunchAgents/io.arthack.agentvoice.server.plist" | rg 'AssociatedBundleIdentifiers|io\.arthack\.agentvoice'
+/usr/bin/codesign --verify --strict "$state_root/default/service/runtime/AgentVoice.app"
+/usr/bin/codesign -d -r- --entitlements :- "$state_root/default/service/runtime/AgentVoice.app/Contents/MacOS/agentvoice"
+```
