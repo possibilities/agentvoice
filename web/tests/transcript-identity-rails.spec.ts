@@ -173,13 +173,27 @@ for (const width of [1440, 800, 390, 320]) {
         const text = row
           .querySelector(".markdown-content, .activity-group__count, .tool-disclosure__name")!
           .getBoundingClientRect();
-        return { icon: icon.x, text: text.x, gap: text.x - icon.right };
+        return {
+          identity: row.getAttribute("data-identity"),
+          icon: icon.x,
+          cellWidth: icon.width,
+          inset: icon.x - row.getBoundingClientRect().x,
+          text: text.x,
+          gap: text.x - icon.right,
+        };
       }),
     );
+    const referenceRows = bulletGeometry.filter(
+      (row) => row.identity === "human" || row.identity === "voice",
+    );
+    expect(referenceRows.map((row) => row.inset)).toEqual([16, 16]);
+    const referenceInset = referenceRows[0]!.inset;
     for (const geometry of bulletGeometry) {
       expect(Math.abs(geometry.icon - bulletGeometry[0]!.icon)).toBeLessThanOrEqual(1);
       expect(Math.abs(geometry.text - bulletGeometry[0]!.text)).toBeLessThanOrEqual(1);
-      expect(Math.abs(geometry.gap - 10)).toBeLessThanOrEqual(1);
+      expect(geometry.cellWidth).toBe(16);
+      expect(Math.abs(geometry.inset - referenceInset)).toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.gap - referenceInset)).toBeLessThanOrEqual(1);
     }
     const optical = await rows.evaluateAll((elements) =>
       elements.map((row) => {

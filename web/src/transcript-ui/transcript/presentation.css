@@ -88,16 +88,17 @@
 }
 /* The measured block owns vertical spacing; rails only place its identity and action. */
 .identity-row {
+  --identity-row-inset: 16px;
   --identity-rail-width: 16px;
   --identity-action-width: 28px;
-  --identity-rail-gap: 10px;
+  --identity-rail-gap: var(--identity-row-inset);
   --identity-action-gap: 8px;
   --identity-mark-top: 6px;
   display: grid;
   grid-template-columns: var(--identity-rail-width) var(--identity-rail-gap) minmax(0, 1fr) var(--identity-action-gap) var(--identity-action-width);
   align-items: start;
   column-gap: 0;
-  padding-inline: 16px;
+  padding-inline: var(--identity-row-inset);
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -107,7 +108,7 @@
 .identity-row[data-identity="human"],
 .identity-row[data-identity="voice"] {
   padding-block: 12px;
-  padding-left: 14px;
+  padding-left: calc(var(--identity-row-inset) - 2px);
   border-left: 2px solid var(--line);
   background: var(--field);
 }

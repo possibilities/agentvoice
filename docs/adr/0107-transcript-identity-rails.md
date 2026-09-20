@@ -64,6 +64,12 @@ A routing rollup carries the first source message's `createdAt`, matching its
 stable first-source ID. Later updates retain that creation time. Missing or invalid
 first-source time stays omitted, including when a later update has a known time.
 
+Scope revision 10 replaces the ten-pixel reading gap with the measured Human/Voice
+outer-card-to-icon inset: sixteen pixels, including the two-pixel rule and
+fourteen-pixel padding. The row inset and reading gap share one CSS reference so
+all identities remain symmetric. The icon cell remains sixteen pixels and the
+independent right-action clearance remains eight pixels.
+
 Scope revision 9 refines the expanded group boundary: a closed group has no
 divider; an open group has one restrained one-pixel Separator between its header
 and children, with no rules between children or after the last child. The list
