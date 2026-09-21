@@ -45,6 +45,7 @@ function fixture() {
     join(root, "src"),
     join(root, "src/core"),
     join(root, "fixture-dep"),
+    join(root, "web"),
   ]) {
     mkdirSync(dir);
   }
@@ -75,6 +76,39 @@ function fixture() {
   for (const name of ["bun", "git", "dirname", "bash"]) {
     symlinkSync(name === "bun" ? process.execPath : Bun.which(name)!, join(commands, name));
   }
+  writeFileSync(
+    join(commands, "npm"),
+    `#!/bin/bash
+set -euo pipefail
+[ "$1" = --prefix ]
+web=$2
+shift 2
+case "$1" in
+  ci)
+    /usr/bin/printf 'ci\\n' >> "$FIXTURE_BASE/web-build-calls"
+    [ "\${FIXTURE_WEB_CI_EXIT:-0}" = 0 ] || exit "$FIXTURE_WEB_CI_EXIT"
+    /bin/mkdir -p "$web/node_modules"
+    ;;
+  run)
+    [ "$2" = build ]
+    /usr/bin/printf 'build\\n' >> "$FIXTURE_BASE/web-build-calls"
+    [ "\${FIXTURE_WEB_BUILD_EXIT:-0}" = 0 ] || exit "$FIXTURE_WEB_BUILD_EXIT"
+    output="$web/dist"
+    shift 2
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = --outDir ]; then shift; output=$1; fi
+      shift
+    done
+    /bin/mkdir -p "$output"
+    if [ -z "\${FIXTURE_WEB_BUILD_NO_OUTPUT:-}" ]; then
+      /usr/bin/printf '<!doctype html><title>AgentVoice fixture</title>\\n' > "$output/index.html"
+    fi
+    ;;
+  *) exit 64 ;;
+esac
+`,
+    { mode: 0o755 },
+  );
   for (const name of ["swift", "iconutil", "codesign"]) {
     symlinkSync("/usr/bin/true", join(commands, name));
   }
@@ -96,6 +130,8 @@ function fixture() {
   const source = join(root, "src/main.ts");
   writeFileSync(source, "#!/usr/bin/env bun\nconsole.log(process.cwd());\n", { mode: 0o755 });
   writeFileSync(join(root, ".gitignore"), "node_modules/\nbuild/\ndist/\n");
+  writeFileSync(join(root, "web/package.json"), '{"name":"agentvoice-web","private":true}\n');
+  writeFileSync(join(root, "web/package-lock.json"), '{"lockfileVersion":3}\n');
   writeFileSync(
     join(root, "scripts/build-macos-app.sh"),
     `#!/bin/bash
@@ -302,6 +338,57 @@ exit "$FIXTURE_COMPILER_EXIT"
     ]);
     return { code, out, err };
   }
+  async function runMacInstall(
+    options: { quitMenu?: boolean; webBuildExit?: string; webBuildNoOutput?: boolean } = {},
+  ) {
+    const script = `
+      const { install } = await import(process.env["FIXTURE_ROOT"] + "/scripts/install.ts");
+      const { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
+      const base = process.env["FIXTURE_BASE"];
+      const checks = {
+        plistValue(app, key) { return JSON.parse(readFileSync(app + "/Contents/Info.plist", "utf8"))[key]; },
+        verifySignature(app) {
+          if (readFileSync(app + "/Contents/MacOS/AgentVoice", "utf8") !== "signed") throw new Error("invalid signature");
+        },
+        running(executable) {
+          return existsSync(base + "/menu-running") && readFileSync(base + "/menu-running", "utf8") === executable;
+        },
+      };
+      const lifecycle = {
+        async requestQuit(executable, revision) {
+          appendFileSync(base + "/menu-calls", "quit " + executable + " " + revision + "\\n");
+          rmSync(base + "/menu-running", { force: true });
+        },
+        async launch(app) {
+          appendFileSync(base + "/menu-calls", "launch " + app + "\\n");
+          writeFileSync(base + "/menu-running", app + "/Contents/MacOS/AgentVoice");
+        },
+      };
+      await install(false, true, {
+        quitMenu: process.env["FIXTURE_QUIT_MENU"] === "1",
+        appChecks: checks,
+        appLifecycle: lifecycle,
+      });
+    `;
+    const child = Bun.spawn([process.execPath, "-e", script], {
+      cwd: base,
+      env: {
+        ...env,
+        FIXTURE_QUIT_MENU: options.quitMenu ? "1" : "0",
+        FIXTURE_WEB_BUILD_EXIT: options.webBuildExit ?? "0",
+        FIXTURE_WEB_BUILD_NO_OUTPUT: options.webBuildNoOutput ? "1" : "",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: AbortSignal.timeout(15_000),
+    });
+    const [code, out, err] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { code, out, err };
+  }
   return {
     base,
     runService,
@@ -315,6 +402,7 @@ exit "$FIXTURE_COMPILER_EXIT"
     sha,
     run,
     runMenu,
+    runMacInstall,
     writeMenuApp,
     command,
     commit,
@@ -324,6 +412,18 @@ exit "$FIXTURE_COMPILER_EXIT"
 }
 
 describe("command-only editable installer (isolated checkouts, no microphone or inference)", () => {
+  test("prepares frozen web dependencies and builds one verified production reader before publication", async () => {
+    const f = fixture();
+    const result = await f.run();
+    expect(result.code, result.err).toBe(0);
+    expect(readFileSync(join(f.base, "web-build-calls"), "utf8")).toBe("ci\nbuild\n");
+    expect(readFileSync(join(f.root, "web/dist/index.html"), "utf8")).toContain(
+      "AgentVoice fixture",
+    );
+    expect(readlinkSync(f.target)).toBe(f.source);
+    expect(readFileSync(f.receipt, "utf8")).toBe(`${f.sha}\n`);
+  });
+
   test("the package alias invokes the same installer", () => {
     const f = fixture();
     f.command([process.execPath, "run", "cli:install", "--command-only"]);
@@ -461,6 +561,7 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     "missing-codex",
     "bad-codex-path",
     "missing-compiler",
+    "missing-npm",
     "source-mode",
     "relative-bin",
     "symlink-bin",
@@ -476,6 +577,7 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
       if (kind === "missing-codex") unlinkSync(join(f.commands, "codex"));
       if (kind === "bad-codex-path") overrides["CODEX_PATH"] = join(f.base, "nonexistent");
       if (kind === "missing-compiler") unlinkSync(join(f.commands, "clang"));
+      if (kind === "missing-npm") unlinkSync(join(f.commands, "npm"));
       if (kind === "source-mode") chmodSync(f.source, 0o666);
       if (kind === "relative-bin") overrides["AGENTVOICE_INSTALL_BIN_DIR"] = "relative";
       if (kind === "symlink-bin") {
@@ -542,6 +644,26 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     expect(readdirSync(f.state)).toEqual([".install-lock"]);
   });
 
+  test("a failed or unverifiable production web build preserves command publication state", async () => {
+    for (const failure of ["exit", "missing-output"] as const) {
+      const f = fixture();
+      mkdirSync(join(f.root, "web/dist"));
+      writeFileSync(join(f.root, "web/dist/index.html"), "previous production reader\n");
+      const result = await f.run(undefined, {
+        FIXTURE_WEB_BUILD_EXIT: failure === "exit" ? "9" : "0",
+        FIXTURE_WEB_BUILD_NO_OUTPUT: failure === "missing-output" ? "1" : "",
+      });
+      expect(result.code).toBe(1);
+      expect(existsSync(f.target)).toBe(false);
+      expect(existsSync(f.receipt)).toBe(false);
+      expect(readdirSync(f.state)).toEqual([".install-lock"]);
+      expect(readFileSync(join(f.base, "web-build-calls"), "utf8")).toBe("ci\nbuild\n");
+      expect(readFileSync(join(f.root, "web/dist/index.html"), "utf8")).toBe(
+        "previous production reader\n",
+      );
+    }
+  });
+
   test("a source change during the build prevents publication", async () => {
     const f = fixture();
     expect((await f.run(undefined, { FIXTURE_CHANGE_SOURCE: "1" })).code).toBe(1);
@@ -560,6 +682,60 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     expect(readFileSync(f.receipt, "utf8")).toBe(`${sha}\n`);
     expect(result.err).toContain("PATH does not select this command");
     expect(readFileSync(join(f.commands, "agentvoice"), "utf8")).toContain("exit 99");
+  });
+});
+
+describe("full macOS-shaped installer preparation (isolated app and no service)", () => {
+  test("a current menu app skips its rebuild but still prepares one production reader before command publication", async () => {
+    const f = fixture();
+    const app = f.writeMenuApp(f.sha);
+    const executable = join(app, "Contents", "MacOS", "AgentVoice");
+    writeFileSync(join(f.base, "menu-running"), executable);
+
+    const result = await f.runMacInstall();
+    expect(result.code, result.err).toBe(0);
+    expect(readFileSync(join(f.base, "web-build-calls"), "utf8")).toBe("ci\nbuild\n");
+    expect(existsSync(join(f.root, "dist/AgentVoice.app"))).toBe(false);
+    expect(existsSync(join(f.base, "menu-calls"))).toBe(false);
+    expect(readFileSync(join(f.base, "menu-running"), "utf8")).toBe(executable);
+    expect(readlinkSync(f.target)).toBe(f.source);
+    expect(readFileSync(f.receipt, "utf8")).toBe(`${f.sha}\n`);
+  });
+
+  test("a quit-menu update prepares one production reader before replacing and reopening the app", async () => {
+    const f = fixture();
+    const app = f.writeMenuApp(oldRevision);
+    const executable = join(app, "Contents", "MacOS", "AgentVoice");
+    writeFileSync(join(f.base, "menu-running"), executable);
+
+    const result = await f.runMacInstall({ quitMenu: true });
+    expect(result.code, result.err).toBe(0);
+    expect(readFileSync(join(f.base, "web-build-calls"), "utf8")).toBe("ci\nbuild\n");
+    expect(readFileSync(join(f.base, "menu-calls"), "utf8")).toBe(
+      `quit ${executable} ${oldRevision}\nlaunch ${app}\n`,
+    );
+    expect(
+      JSON.parse(readFileSync(join(app, "Contents/Info.plist"), "utf8")).AgentVoiceSourceRevision,
+    ).toBe(f.sha);
+    expect(readlinkSync(f.target)).toBe(f.source);
+    expect(readFileSync(f.receipt, "utf8")).toBe(`${f.sha}\n`);
+  });
+
+  test("web build failure happens before a quit-menu app update or command publication", async () => {
+    const f = fixture();
+    const app = f.writeMenuApp(oldRevision);
+    const executable = join(app, "Contents", "MacOS", "AgentVoice");
+    writeFileSync(join(f.base, "menu-running"), executable);
+
+    const result = await f.runMacInstall({ quitMenu: true, webBuildExit: "9" });
+    expect(result.code).toBe(1);
+    expect(existsSync(join(f.base, "menu-calls"))).toBe(false);
+    expect(readFileSync(join(f.base, "menu-running"), "utf8")).toBe(executable);
+    expect(
+      JSON.parse(readFileSync(join(app, "Contents/Info.plist"), "utf8")).AgentVoiceSourceRevision,
+    ).toBe(oldRevision);
+    expect(existsSync(f.target)).toBe(false);
+    expect(existsSync(f.receipt)).toBe(false);
   });
 });
 

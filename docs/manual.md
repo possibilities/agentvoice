@@ -335,12 +335,13 @@ an audio device. `scripts/install.sh --install` is the single editable installer
 to the same contract. Installation does not verify authentication or connect a
 voice session; live voice compatibility is a separate check.
 
-The installer requires Bun 1.3+, an executable stock Codex (`CODEX_PATH` or PATH),
-a C11 compiler (Zig, clang or cc), and a clean checkout with the AgentVoice GitHub
-origin. A full macOS install also requires the Swift command-line tools, `iconutil`,
-and `codesign`. Codex is checked for presence, not invoked; login and realtime
-compatibility are separate runtime prerequisites. It runs
-`bun install --frozen-lockfile`, builds native audio to a temporary file, then
+The installer requires Bun 1.3+, Node.js 24+ with npm, an executable stock Codex
+(`CODEX_PATH` or PATH), a C11 compiler (Zig, clang or cc), and a clean checkout
+with the AgentVoice GitHub origin. A full macOS install also requires the Swift
+command-line tools, `iconutil`, and `codesign`. Codex is checked for presence, not
+invoked; login and realtime compatibility are separate runtime prerequisites. It
+runs `bun install --frozen-lockfile`, `npm --prefix web ci`, builds native audio to
+a temporary file, and runs and verifies one production web build before it
 atomically links `~/.local/bin/agentvoice`
 directly to `src/main.ts` and records the commit in
 `~/.local/state/agentvoice/deployed-sha` (`XDG_STATE_HOME` honored). The link preserves
@@ -362,12 +363,12 @@ Menu updates have a separate non-server scope:
 scripts/install.sh --install --menu-only --quit-menu
 ```
 
-`--menu-only` builds and installs only the native menu app. It does not rebuild
-native audio, change the editable command or deployed receipt, or operate the
-LaunchAgent, so the server and any call continue unchanged. `--quit-menu` is the
-explicit permission to ask an outdated running owned menu app to quit through
-its private control socket, wait boundedly, and reopen the new app only if the
-old one was running. Without that flag, a changed running app is refused. The
+`--menu-only` builds and installs only the native menu app. It does not prepare or
+build the web reader, rebuild native audio, change the editable command or deployed
+receipt, or operate the LaunchAgent, so the server and any call continue unchanged.
+`--quit-menu` is the explicit permission to ask an outdated running owned menu app
+to quit through its private control socket, wait boundedly, and reopen the new app
+only if the old one was running. Without that flag, a changed running app is refused. The
 flag adds no server action when used with a full install; full installation still
 has its separately documented server restart.
 
@@ -390,7 +391,10 @@ TypeScript edits are live; native source changes need a rebuild.
 This is an editable checkout, not an immutable deployment or rollback of dependencies.
 
 Rerunning is safe: unrelated files/links, unsafe paths/receipts and dirty source
-are refused. A link to another checkout requires its matching receipt; an existing
+are refused. Frozen dependency, native build, web build, or production-index
+verification failures preserve the prior production build and happen before
+command/receipt publication and before an outdated running menu is asked to quit.
+A link to another checkout requires its matching receipt; an existing
 link into this checkout can be adopted or refreshed. The receipt records the last
 installation, not the current state of subsequent edits. Build failures leave the
 command/receipt untouched; a failed compile preserves the prior native library.
@@ -406,7 +410,9 @@ If another command shadows the link on PATH, installation warns without deleting
 For disposable tests or alternate destinations, set absolute
 `AGENTVOICE_INSTALL_BIN_DIR`, `AGENTVOICE_INSTALL_STATE_DIR`, and on macOS
 `AGENTVOICE_INSTALL_APP_DIR` paths. Pass `--command-only` to avoid building or
-installing the menu app and touching the user's LaunchAgent. The bin and state
+installing the menu app and touching the user's LaunchAgent; command-only still
+prepares frozen web dependencies and verifies the production reader build needed
+by `agentvoice serve --production`. The bin and state
 overrides move only command publication and its receipt; service state follows
 XDG_STATE_HOME.
 Non-macOS installations publish the command only. No prompts, skills, credentials,

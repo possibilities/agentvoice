@@ -80,8 +80,9 @@ then open the newly installed app once. After that one-time bootstrap, future
 menu updates can preserve running presence with `--quit-menu`.
 
 `scripts/install.sh --install --command-only` continues to publish only the CLI
-and its receipt. It neither builds nor installs the menu app and does not manage
-the LaunchAgent.
+and its receipt after preparing frozen web dependencies and verifying one production
+reader build. It neither builds nor installs the menu app and does not manage the
+LaunchAgent.
 
 ## Future native UI
 

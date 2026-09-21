@@ -83,9 +83,11 @@ agentvoice serve --tailscale     # local URL plus a tailnet-only Portless URL
 ```
 
 From an uninstalled checkout, use `bun run src/main.ts serve`. The normal desktop
-installer still owns the CLI, menu app and voice-server service; web dependencies
-are prepared separately in this first slice. `serve` never installs dependencies,
-builds assets, starts a voice server or starts a call.
+installer owns the CLI, menu app, voice-server service, frozen web dependency
+preparation, and a verified production build for every command-publishing scope.
+Manual dependency preparation remains available for development checkouts.
+`serve` itself never installs dependencies, builds assets, starts a voice server or
+starts a call.
 
 A running development reader retains its optimized dependency graph. Installing a
 new transcript archive with `npm ci` and building successfully does not prove that
@@ -114,9 +116,12 @@ bun run web:build
 agentvoice serve --production    # Vite preview of prepared web/dist
 ```
 
-Production remains optional. Both Vite modes use the same API bridge. The named
-route is fixed across worktrees. Backend listeners bind strictly to `127.0.0.1`
-at portless's assigned `PORT`; HMR follows either admitted HTTPS origin. LAN,
+Production serving remains optional. A successful command-publishing installer has
+already prepared `web/dist/index.html`; a later source edit still requires another
+build or install before production serving reflects that edit. Both Vite modes use
+the same API bridge. The named route is fixed across worktrees. Backend listeners
+bind strictly to `127.0.0.1` at portless's assigned `PORT`; HMR follows either
+admitted HTTPS origin. LAN,
 public tunnels and wildcard routes are disabled. TERM, INT and HUP stop the
 foreground process tree and unregister its route. A static hosted build cannot
 connect to local sockets.

@@ -11,6 +11,7 @@ import {
   realpathSync,
   renameSync,
   rmdirSync,
+  rmSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
@@ -37,14 +38,16 @@ const uid = process.getuid?.();
 const usage = `Usage: scripts/install.sh --install [--quit-menu] [--menu-only | --command-only] | --help
 
 Install frozen dependencies, build native audio, and atomically link the editable
-agentvoice command to this checkout. On macOS also install AgentVoice.app and start
-the default waiting-server LaunchAgent (replacing this installer's existing job).
+agentvoice command to this checkout. Command publication also prepares frozen web
+dependencies and verifies one production reader build. On macOS also install
+AgentVoice.app and start the default waiting-server LaunchAgent (replacing this
+installer's existing job).
 No server-owned audio opens; the service restores a valid marked Codex session or
 waits unmarked for a frontend. --command-only skips the app and service. --menu-only
 updates only the menu app and never restarts the server.
 For an outdated running menu, --quit-menu asks the owned app to quit gracefully and
 reopens it after publication. Requires a clean Git checkout, Bun 1.3+, stock Codex
-and a C11 compiler for a full or command-only install.
+and a C11 compiler, plus Node.js 24+ with npm, for a full or command-only install.
 
 Destinations (absolute paths; no application-controlled symlink components):
   AGENTVOICE_INSTALL_BIN_DIR    default: ~/.local/bin
@@ -114,6 +117,18 @@ function safeFile(path: string): void {
   }
 }
 
+function verifyProductionWebBuild(directoryPath: string): void {
+  directory(directoryPath);
+  const index = join(directoryPath, "index.html");
+  if (!info(index)) {
+    refuse("production web build did not produce index.html; command link not changed");
+  }
+  safeFile(index);
+  if (lstatSync(index).size === 0) {
+    refuse("production web build produced an empty index.html; command link not changed");
+  }
+}
+
 function git(checkout: string, ...args: string[]): string {
   const result = Bun.spawnSync(["git", "-C", checkout, ...args], {
     stdout: "pipe",
@@ -173,9 +188,17 @@ export async function install(
   const menuOnly = options.menuOnly ?? false;
   if (!menuOnly) checkPrerequisites();
   const sha = cleanHead();
+  const web = join(root, "web");
+  let npm: string | undefined;
   if (!menuOnly) {
     safeFile(join(root, "bun.lock"));
+    safeFile(join(web, "package.json"));
+    safeFile(join(web, "package-lock.json"));
     safePath(join(root, "build", "native", `${process.platform}-${process.arch}`));
+    safePath(join(web, "node_modules"));
+    safePath(join(web, "dist"));
+    npm = whichFromEnvironment("npm") ?? undefined;
+    if (!npm) refuse("npm is required to prepare the production web reader");
   }
   const binDir = process.env["AGENTVOICE_INSTALL_BIN_DIR"] ?? join(homedir(), ".local/bin");
   const stateDir =
@@ -276,13 +299,36 @@ export async function install(
   }
   let linkStage: string | undefined;
   let receiptStage: string | undefined;
+  let webBuildStage: string | undefined;
+  let webPublishStage: string | undefined;
+  let webHadPrevious = false;
+  let webPublished = false;
+  let commandPublished = false;
   let menuWasRunning = false;
   let menuRestoreAttempted = false;
   try {
     if (!menuOnly) {
       await run([process.execPath, "install", "--frozen-lockfile"]);
+      await run([npm!, "--prefix", web, "ci"]);
       safePath(join(root, "build", "native", `${process.platform}-${process.arch}`));
       await run([process.execPath, "run", join(root, "scripts/build-native.ts")]);
+      const buildRoot = join(root, "build");
+      safePath(buildRoot);
+      mkdirSync(buildRoot, { recursive: true, mode: 0o755 });
+      directory(buildRoot);
+      webBuildStage = mkdtempSync(join(buildRoot, ".agentvoice-web-"));
+      await run([
+        npm!,
+        "--prefix",
+        web,
+        "run",
+        "build",
+        "--",
+        "--outDir",
+        webBuildStage,
+        "--emptyOutDir",
+      ]);
+      verifyProductionWebBuild(webBuildStage);
     }
     if (installApp && appDisposition !== "current") {
       await run(["/bin/bash", join(root, "scripts/build-macos-app.sh")]);
@@ -308,11 +354,30 @@ export async function install(
     }
     if (!menuOnly) {
       validateDestination();
+      const webDist = join(web, "dist");
+      webPublishStage = mkdtempSync(join(web, ".agentvoice-web-publish-"));
+      const previousWebDist = join(webPublishStage, "previous");
+      if (info(webDist)) {
+        directory(webDist);
+        renameSync(webDist, previousWebDist);
+        webHadPrevious = true;
+      }
+      try {
+        renameSync(webBuildStage!, webDist);
+        webBuildStage = undefined;
+        verifyProductionWebBuild(webDist);
+        webPublished = true;
+      } catch (error) {
+        if (info(webDist)) rmSync(webDist, { recursive: true, force: true });
+        if (webHadPrevious) renameSync(previousWebDist, webDist);
+        throw error;
+      }
       linkStage = mkdtempSync(join(binDir, ".agentvoice-link-"));
       receiptStage = mkdtempSync(join(stateDir, ".agentvoice-receipt-"));
       symlinkSync(source, join(linkStage, "command"));
       writeFileSync(join(receiptStage, "receipt"), `${sha}\n`, { mode: 0o600, flag: "wx" });
       renameSync(join(linkStage, "command"), target);
+      commandPublished = true;
       renameSync(join(receiptStage, "receipt"), receipt);
       validateDestination();
       console.log(`Installed ${target} -> ${source}\nRecorded ${sha} in ${receipt}`);
@@ -374,6 +439,21 @@ export async function install(
         : "No prompts, credentials or Codex settings changed. Open https://agentvoice.localhost or run agentvoice client.",
     );
   } catch (error) {
+    let failure = error;
+    if (webPublished && !commandPublished) {
+      try {
+        const webDist = join(web, "dist");
+        if (info(webDist)) rmSync(webDist, { recursive: true, force: true });
+        if (webPublishStage && webHadPrevious) {
+          renameSync(join(webPublishStage, "previous"), webDist);
+        }
+        webPublished = false;
+      } catch (rollbackError) {
+        failure = new Error(
+          `${String(error)}; the previous production web build also could not be restored: ${String(rollbackError)}`,
+        );
+      }
+    }
     if (installApp && menuWasRunning && !menuRestoreAttempted) {
       menuRestoreAttempted = true;
       try {
@@ -381,11 +461,11 @@ export async function install(
         console.warn("Menu update failed after quit; reopened the preserved AgentVoice menu app.");
       } catch (relaunchError) {
         throw new Error(
-          `${String(error)}; the preserved menu app also could not be reopened: ${String(relaunchError)}`,
+          `${String(failure)}; the preserved menu app also could not be reopened: ${String(relaunchError)}`,
         );
       }
     }
-    throw error;
+    throw failure;
   } finally {
     for (const [stage, name] of [
       [linkStage, "command"],
@@ -394,6 +474,12 @@ export async function install(
       if (!stage) continue;
       if (info(join(stage, name))) unlinkSync(join(stage, name));
       rmdirSync(stage);
+    }
+    if (webBuildStage && info(webBuildStage)) {
+      rmSync(webBuildStage, { recursive: true, force: true });
+    }
+    if (webPublishStage && info(webPublishStage)) {
+      rmSync(webPublishStage, { recursive: true, force: true });
     }
     releaseInstallLock();
   }

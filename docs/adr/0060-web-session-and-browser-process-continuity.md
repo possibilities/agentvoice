@@ -63,3 +63,23 @@ eviction, clearing and platform termination. A stable persistence instance ID is
 a host ownership contract, not authentication. Separate active browser contexts
 must not intentionally share it. No browser recovery grants native action
 authority, and a newly verified session cannot inherit another session's state.
+
+## Installer production-asset amendment (September 20, 2026)
+
+Every successful installer scope that publishes the public editable command now
+prepares the frozen root and web dependency sets and runs exactly one verified
+production web build before command-link or deployed-receipt publication. This
+includes command-only installation, a full install with `--quit-menu`, and a full
+macOS install whose already-current menu app needs no rebuild. A failed dependency,
+native, web, or `web/dist/index.html` verification step leaves command/receipt and
+menu process publication untouched and preserves the prior production build. A
+verified build is staged away from `web/dist` and replaces that directory only
+after every build and source-integrity check succeeds. The menu-only scope remains
+independent: it does not publish the command, prepare web dependencies, build web
+assets, operate the LaunchAgent, or interrupt a call.
+
+The installer guarantees that its published checkout can satisfy the asset-presence
+precondition of `agentvoice serve --production`. It does not start or refresh a web
+reader process, the waiting server, a browser, or a call as part of build
+preparation; served-code activation and browser cache verification remain separate
+delivery steps.

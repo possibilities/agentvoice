@@ -152,9 +152,11 @@ when the phone is available again. Report any restoration problem immediately.
   explicit installation scope;
   never use the live destination to test. Installer tests use disposable checkouts,
   local-only dependencies, a fake compiler, a fake launchctl runner and a Codex invocation sentinel.
-  Use --command-only for command publication fixtures; it skips both the app and
-  LaunchAgent. Use --menu-only --quit-menu for an explicit owned-menu update that
-  preserves its prior running presence without operating the LaunchAgent. The
+  Every command-publishing scope installs frozen root and web dependencies and
+  verifies one production web build before publishing the command or deployed
+  receipt. Use --command-only for command publication fixtures; it skips both the
+  app and LaunchAgent. Use --menu-only --quit-menu for an explicit owned-menu update
+  that preserves its prior running presence without operating the LaunchAgent. The
   private menu quit request shares the app's busy gate and never stops the server
   or a call. Never run live launchctl in tests.
 

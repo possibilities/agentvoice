@@ -20,12 +20,14 @@ owns the current source map and recording/attachment implementation guidance.
   [ADRs 0056](adr/0056-independent-agenthud.md) and
   [0068](adr/0068-durable-native-parentage-export.md).
 
-- scripts/install.ts: clean checkout, frozen dependencies, staged native build,
-  ownership-safe editable command publication and deployed-sha receipt, followed by
+- scripts/install.ts: clean checkout, frozen root and web dependencies, staged native
+  build, one staged and verified production web build, ownership-safe editable command
+  publication and deployed-sha receipt, followed by
   the native menu app and default LaunchAgent installation on macOS. --command-only
-  skips both app and service management; --menu-only builds and publishes only the
-  app, with explicit --quit-menu presence preservation through its private control
-  endpoint and no LaunchAgent action.
+  skips both app and service management but retains all command preparation;
+  --menu-only builds and publishes only the app, with explicit --quit-menu presence
+  preservation through its private control endpoint and no command, web, native
+  audio, receipt or LaunchAgent action.
   No configuration, prompt/skill setup or legacy command cleanup.
 - macos/ + scripts/build-macos-app.sh: AppKit status item, native main-app login
   registration, versioned service-state observation and explicit load/unload/restart
