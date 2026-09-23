@@ -33,7 +33,7 @@ env -u BASH_ENV /bin/bash --noprofile --norc <<'AGENTVOICE_TRIAL'
   trial_workspace="$(mktemp -d "$trial_parent/voice-trial.XXXXXX")"
   export XDG_CACHE_HOME="$trial_workspace/cache"
   bun run src/main.ts role eject --workspace "$trial_workspace" \
-    --role "$HOME/.local/share/agentstart/resources/roles/manager" --voice cove
+    --role "$HOME/.local/share/agentstart/resources/roles/default" --voice cove
   bun run src/main.ts role status --workspace "$trial_workspace"
   printf '\nWORKSPACE: %s\n\nRun this exact command in terminal 2:\n' "$trial_workspace"
   printf 'bun run %q --workspace %q\n\n' "$PWD/src/main.ts" "$trial_workspace"

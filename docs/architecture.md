@@ -145,7 +145,7 @@ owns the current source map and recording/attachment implementation guidance.
   shape and product-invariant choices, never rewrite the forwarded strings.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md owns native multi-agent mode plus V2
-  enablement on start/resume. AgentStart's manager and worker roles carry it; roles without
+  enablement on start/resume. AgentStart's default role carries it; roles without
   the file inherit native policy. Preserve unrelated V2 settings; duplicate mode owners, disabled
   V2 and raw config replacement that drops the file are launch errors.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.

@@ -10,7 +10,7 @@ the active runtime and `role.desired` identifies the database head. Equality
 only proves that the runtime loaded the current immutable database revision. It
 does not say whether a directory role currently selected by launch configuration
 has newer guidance. Treating those revision fields as source freshness hid an
-outdated generated cache after the AgentStart manager role changed.
+outdated generated cache after the then-named AgentStart manager role changed.
 
 Runtime preflight now best-effort resolves the original launch configuration for
 the exact bound workspace. When it still selects a directory role, the candidate

@@ -3,6 +3,9 @@
 Extended by [ADR 0049](0049-worker-role.md): one explicit worker role shares the
 working standards with bounded assignment ownership and a default completion
 return contract. Both shipped roles remain in AgentVoice for now.
+The separate worker directory is later retired by
+[ADR 0108](0108-use-one-agentstart-default-role.md); native worker responsibility
+and parent-return behavior remain part of the default role's doctrine.
 
 Accepted September 12, 2026. Extends
 [ADR 0047](0047-adaptive-work-execution.md) from adaptive execution to a common

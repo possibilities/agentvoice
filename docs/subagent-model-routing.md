@@ -3,7 +3,7 @@
 Model evidence researched September 8, 2026; retained as a dated reference.
 [ADR 0048](adr/0048-universal-working-doctrine.md) keeps the operative assignment
 procedure in
-[the manager role append, now owned by AgentStart](../roles/README.md)
+[the default role append, owned by AgentStart](../roles/README.md)
 and removes the repeated model tables from its always-present text. Current
 native capabilities remain authoritative. No extra prompt loader, model
 registry, worker dispatcher or account integration is introduced.

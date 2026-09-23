@@ -1,5 +1,9 @@
 # 0051: AgentStart owns manager and worker roles
 
+Naming and the two-role roster are superseded by
+[ADR 0108](0108-use-one-agentstart-default-role.md), which keeps AgentStart
+ownership and AgentVoice's generic consumer boundary for one role named `default`.
+
 Accepted September 12, 2026. Supersedes the source ownership and naming in
 [ADR 0049](0049-worker-role.md), retaining responsibility and native runtime
 contracts. The operator requested roles that carry both their prompt Markdown

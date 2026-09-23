@@ -187,7 +187,7 @@ VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md, VOICE_ORCHESTRATOR_SESSION_START.md,
 VOICE_ORCHESTRATOR_SESSION_END.md), each one
 native Codex control. Absent sends nothing; an empty file sends an empty string;
 an override and an append for the same agent cannot coexist. Former names only
-trigger warnings. The explicitly selected AgentStart manager role carries its own mode
+trigger warnings. The explicitly selected AgentStart default role carries its own mode
 and append. _Avoid_: prompt-files
 (retired config key), seed files.
 
@@ -227,13 +227,12 @@ explicit fenced adoption can capture a directory role into a new asset revision
 while preserving the binding identity and saved settings. Neither operation creates
 a live parent. Native authentication and history stay outside. See ADRs 0042/0083.
 
-**Worker role** — The shipped `roles/worker` directory, responsible for one
-assignment. Its owner/return recipient is the parent when delegated or the human
-when launched directly. It may delegate useful bounded subtasks within native
-capabilities. `roles/default` remains the manager role. Role responsibility does
-not determine native thread ancestry: a worker-role launch can be a call's root,
-and native subagent creation does not automatically select this directory.
-_Avoid_: runtime worker (the disposable controller/runtime process is unrelated).
+**Fleet default role** — The one AgentStart-published working directory. It
+carries the human-facing manager doctrine and complete explicit MCP inventory.
+Native subagents remain bounded workers that return to their parent, but no
+separate worker role exists and native delegation does not select another role
+directory. _Avoid_: manager role, worker role, runtime worker (the disposable
+controller/runtime process is unrelated).
 
 **Role revision** — An immutable saved settings/asset snapshot loaded at call
 startup or runtime restart. Voice-only application records its own revision,

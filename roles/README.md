@@ -1,13 +1,12 @@
 # External working roles
 
-AgentStart now owns the former `default` role as `manager`, and the `worker`
-role. Their authored prompts and separate MCP inventories live in AgentStart's
-`roles/manager` and `roles/worker`. Its normal resource sync assembles launchable
-roles at `~/.local/share/agentstart/resources/roles/{manager,worker}`.
+AgentStart owns one working role named `default`. Its authored prompts and MCP
+inventory live in AgentStart's `roles/default`. Normal resource sync assembles it
+at `~/.local/share/agentstart/resources/roles/default` and retires intact owned
+`manager` and `worker` outputs without aliases.
 
 ```sh
-agentvoice server --role ~/.local/share/agentstart/resources/roles/manager
-agentvoice server --role ~/.local/share/agentstart/resources/roles/worker
+agentvoice server --role ~/.local/share/agentstart/resources/roles/default
 ```
 
 AgentVoice consumes convention prompt files, registers the selected skills root,
@@ -18,4 +17,4 @@ Existing workspace role databases retain captured bytes. This ownership change
 does not edit snapshots or reload active calls. The mandatory
 `agentvoice_control` MCP remains supplied by the call controller.
 
-See [ADR 0051](../docs/adr/0051-agentstart-owns-working-roles.md).
+See [ADR 0108](../docs/adr/0108-use-one-agentstart-default-role.md).

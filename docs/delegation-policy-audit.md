@@ -75,7 +75,7 @@ policy. Keep the stock base prompt, the current work model and effort, and
 the existing permission controls.
 
 The policy's single authored source is
-[the former default role's mode](../roles/README.md), now owned by AgentStart's manager role.
+[the default role's mode](../roles/README.md), owned by AgentStart.
 AgentVoice discovers it through the normal role/config-directory prompt loader
 and sends its exact contents as native
 `features.multi_agent_v2.multi_agent_mode_hint_text`, with V2 enabled. Selecting

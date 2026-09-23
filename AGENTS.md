@@ -338,11 +338,11 @@ lives in two siblings, and some changes here must cascade:
   skill, every edge with evidence) in the same change.
 - General agent doctrine — collab, build, maintain, story, the resource
   skills — is `~/code/agentguidance`; tool-specific runbooks stay here.
-AgentStart owns the `manager` and `worker` roles, including prompts and separate
-MCP inventories ([ADR 0051](docs/adr/0051-agentstart-owns-working-roles.md)).
+AgentStart owns the single `default` working role, including its prompts and MCP
+inventory ([ADR 0108](docs/adr/0108-use-one-agentstart-default-role.md)).
 AgentVoice consumes selected role directories through its generic loader.
 For role prompt or system-append changes, edit the canonical sources under
-`~/code/agentstart/roles/manager/` or `~/code/agentstart/roles/worker/`, following
+`~/code/agentstart/roles/default/`, following
 AgentStart's guidance and rendering checks. These include `APPEND_SYSTEM_PROMPT.md`,
 `VOICE_AGENT_APPEND_SYSTEM_PROMPT.md`, and `VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md`.
 Do not edit deployed role copies or recreate these prompt files in AgentVoice.

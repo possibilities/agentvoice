@@ -836,17 +836,16 @@ agentvoice server --role ./roles/researcher
 or a directory path. The `role` key in `server.json` is the file-level default;
 `--role` overrides it. Names use letters, digits, `_` and `-` only.
 
-AgentStart owns the manager (formerly default) and worker role definitions,
-including their prompts and independent MCP inventories. After its resource sync:
+AgentStart owns one default role definition, including its prompts and MCP
+inventory. After its resource sync:
 
 ```sh
-agentvoice server --role ~/.local/share/agentstart/resources/roles/manager
-agentvoice server --role ~/.local/share/agentstart/resources/roles/worker
+agentvoice server --role ~/.local/share/agentstart/resources/roles/default
 ```
 
 No role is selected when `--role` and the config's `role` key are absent.
 See [external working roles](../roles/README.md) and
-[ADR 0051](adr/0051-agentstart-owns-working-roles.md) for ownership.
+[ADR 0108](adr/0108-use-one-agentstart-default-role.md) for ownership.
 AgentVoice applies the selected directory through these generic conventions:
 
 | Role file | Effect in AgentVoice |

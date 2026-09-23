@@ -3,6 +3,9 @@
 Source ownership and naming superseded by [ADR 0051](0051-agentstart-owns-working-roles.md):
 AgentStart owns `manager` (formerly `default`) and `worker`. Responsibility
 and native runtime boundaries below remain in effect.
+The separate worker directory is retired by
+[ADR 0108](0108-use-one-agentstart-default-role.md); its assignment ownership and
+parent-return boundaries remain current for native workers.
 
 Accepted September 12, 2026. Extends
 [ADR 0048](0048-universal-working-doctrine.md) with one new role, `worker`.
