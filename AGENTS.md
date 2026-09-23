@@ -327,8 +327,8 @@ lives in two siblings, and some changes here must cascade:
 
 - Skills under `skills/<name>/` ship into AgentStart's fixed private
   fleet resources (`~/code/agentstart/scripts/sync-skills`, run six-hourly
-  by the scheduled updater). AgentLaunch loads them into every managed
-  session: Claude Code exposes `/agent:<name>`, and Codex uses
+  by the scheduled updater). Bare permission shims do not load these
+  resources; explicit roles can expose `/agent:<name>` in Claude Code, and Codex uses
   `$agent:<name>`. A SKILL.md edit is live within
   six hours, or on demand by running that script.
   Skill names and descriptions provide capability discovery; do not add a
